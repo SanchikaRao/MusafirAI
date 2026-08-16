@@ -1,400 +1,342 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "../../lib/supabase";
 import Link from "next/link";
-
-interface TripFormData {
-  origin: string;
-  destination: string;
-  startDate: string;
-  endDate: string;
-  groupSize: number;
-  totalBudgetINR: number;
-  transportMode: string;
-  dietary: string;
-}
-
-const DESTINATION_CHIPS = [
-  { name: "Goa", emoji: "🌴", origin: "Delhi", defaultBudget: 35000 },
-  { name: "Jaipur", emoji: "🏰", origin: "Delhi", defaultBudget: 22000 },
-  { name: "Udaipur", emoji: "⛵", origin: "Mumbai", defaultBudget: 28000 },
-  { name: "Manali", emoji: "🏔️", origin: "Delhi", defaultBudget: 25000 },
-  { name: "Ooty", emoji: "🌲", origin: "Bengaluru", defaultBudget: 20000 },
-  { name: "Varanasi", emoji: "🛕", origin: "Delhi", defaultBudget: 18000 },
-];
+import { 
+  Compass, 
+  MapPin, 
+  Calendar, 
+  Users, 
+  Sparkles, 
+  ArrowRight, 
+  AlertCircle, 
+  Plane, 
+  Train, 
+  Bus, 
+  Car, 
+  Utensils 
+} from "lucide-react";
 
 export default function PlannerPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState<TripFormData>({
-    origin: "",
-    destination: "",
-    startDate: new Date().toISOString().split("T")[0],
-    endDate: new Date(Date.now() + 86400000 * 3).toISOString().split("T")[0],
+  // Quick preset destinations
+  const popularDestinations = [
+    { label: "Goa", icon: "🌴" },
+    { label: "Jaipur", icon: "🏰" },
+    { label: "Udaipur", icon: "⛵" },
+    { label: "Manali", icon: "🏔️" },
+    { label: "Ooty", icon: "🌲" },
+    { label: "Varanasi", icon: "🛕" },
+  ];
+
+  const [formData, setFormData] = useState({
+    origin: "Ghaziabad",
+    destination: "Jaipur",
+    startDate: "2026-09-01",
+    endDate: "2026-09-04",
     groupSize: 2,
-    totalBudgetINR: 35000,
-    transportMode: "flight",
+    totalBudgetINR: 39000,
+    transportMode: "train",
     dietary: "vegetarian",
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: name === "groupSize" || name === "totalBudgetINR" ? Number(value) : value,
-    }));
+  const handleSelectPreset = (dest: string) => {
+    setFormData((prev) => ({ ...prev, destination: dest }));
   };
 
-  const handleSelectChip = (chip: typeof DESTINATION_CHIPS[0]) => {
-    setFormData((prev) => ({
-      ...prev,
-      destination: chip.name,
-      origin: chip.origin,
-      totalBudgetINR: chip.defaultBudget,
-    }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.origin.trim() || !formData.destination.trim()) {
-      setErrorMessage("Please enter both starting location and destination.");
-      return;
-    }
-
     setLoading(true);
-    setErrorMessage("");
-
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/generate-itinerary`, {
+      // Direct relative API call to the Next.js serverless route
+      const response = await fetch("/api/generate-itinerary", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(formData),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error(`Server returned status ${response.status}`);
+        throw new Error(data.error || "Failed to generate itinerary. Please try again.");
       }
 
-      const itineraryData = await response.json();
-      localStorage.setItem("current_itinerary", JSON.stringify(itineraryData));
+      // Cache the generated plan in localStorage for instant access
+      localStorage.setItem("current_itinerary", JSON.stringify(data));
 
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-
-        if (user) {
-          await supabase.from("trips").insert({
-            user_id: user.id,
-            trip_title: itineraryData.tripTitle || `${formData.destination} Getaway`,
-            origin: formData.origin,
-            destination: formData.destination,
-            start_date: formData.startDate,
-            end_date: formData.endDate,
-            group_size: formData.groupSize,
-            total_budget_inr: formData.totalBudgetINR,
-            transport_mode: formData.transportMode,
-            dietary: formData.dietary,
-            status: "upcoming",
-            itinerary_data: itineraryData,
-          });
-        }
-      } catch (authErr) {
-        console.warn("Could not save to Supabase:", authErr);
-      }
-
-      router.push(`/itinerary/${itineraryData.id}`);
+      // Navigate to the dynamic itinerary page
+      const tripId = data.id || "latest";
+      router.push(`/itinerary/${tripId}`);
     } catch (err: any) {
+      console.error("Submission Error:", err);
+      setError(err.message || "Failed to fetch itinerary. Check your connection or API keys.");
+    } finally {
       setLoading(false);
-      setErrorMessage(err.message || "Failed to generate itinerary. Please try again.");
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] text-[#2D2A26] py-10 px-4 sm:px-6 flex flex-col justify-between">
-      <div className="max-w-3xl mx-auto w-full flex items-center justify-between mb-6">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-2xl bg-[#E86A45] text-white flex items-center justify-center font-serif text-base font-bold shadow-md shadow-[#E86A45]/20">
-            ✦
-          </div>
-          <span className="font-serif font-bold text-xl text-[#1E1B18]">MusafirAI</span>
-        </Link>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard"
-            className="text-xs font-semibold text-[#7A7166] hover:text-[#1E1B18] transition"
-          >
-            My Trips
+    <div className="min-h-screen bg-[#FAFAF8] text-[#1E293B] py-12 px-4 sm:px-6 lg:px-8 font-sans">
+      <div className="max-w-3xl mx-auto">
+        
+        {/* Navigation & Header */}
+        <div className="flex items-center justify-between mb-8 pb-4 border-b border-gray-200">
+          <Link href="/" className="flex items-center gap-2 font-serif text-2xl font-bold text-emerald-800">
+            <Compass className="w-7 h-7 text-emerald-600 animate-spin-slow" />
+            Musafir AI
           </Link>
-          <Link
-            href="/auth"
-            className="text-xs font-bold text-[#E86A45] bg-white px-3.5 py-1.5 rounded-full border border-[#EDE7DC] shadow-2xs hover:bg-[#FAF7F2] transition"
-          >
-            Account / Login
-          </Link>
-        </div>
-      </div>
-
-      <div className="max-w-3xl mx-auto w-full bg-white rounded-3xl p-6 sm:p-10 border border-[#EDE7DC] shadow-sm">
-        <div className="mb-8">
-          <span className="text-[11px] font-bold tracking-widest text-[#E86A45] uppercase">
-            PLAN YOUR ADVENTURE
+          <span className="text-xs uppercase tracking-widest text-emerald-600 font-semibold bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+            AI Travel Studio
           </span>
-          <h1 className="text-3xl sm:text-4xl font-serif font-bold text-[#1E1B18] mt-1">
-            Build your custom itinerary
-          </h1>
-          <p className="text-xs sm:text-sm text-[#7A7166] mt-1.5 font-medium">
-            Tailor your route, set your budget slider, and let AI curate your daily timeline.
-          </p>
         </div>
 
-        {errorMessage && (
-          <div className="mb-6 p-4 rounded-2xl bg-[#FDEEED] border border-[#F8D2CF] text-[#C53929] text-xs font-bold">
-            {errorMessage}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="py-16 text-center space-y-4">
-            <div className="w-12 h-12 border-4 border-[#E86A45] border-t-transparent rounded-full animate-spin mx-auto" />
-            <h3 className="font-serif font-bold text-xl text-[#1E1B18]">
-              Generating itinerary for {formData.destination || "your trip"}...
-            </h3>
-            <p className="text-xs text-[#7A7166] max-w-sm mx-auto">
-              Calculating daily pacing, finding top stays, and balancing your ₹{formData.totalBudgetINR.toLocaleString("en-IN")} budget.
+        {/* Main Card */}
+        <div className="bg-white rounded-3xl p-8 sm:p-10 shadow-xl border border-gray-100 relative overflow-hidden">
+          
+          <div className="mb-8">
+            <p className="text-xs font-bold uppercase tracking-wider text-rose-500 mb-1">
+              Plan Your Adventure
+            </p>
+            <h1 className="text-3xl sm:text-4xl font-serif font-bold text-gray-900 leading-tight">
+              Build your custom itinerary
+            </h1>
+            <p className="text-gray-500 mt-2 text-sm sm:text-base">
+              Tailor your route, set your budget slider, and let AI curate your daily timeline.
             </p>
           </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-8">
-            <div className="space-y-3">
-              <label className="block text-xs font-bold text-[#7A7166] uppercase tracking-wider">
+
+          {/* Error Banner */}
+          {error && (
+            <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 flex items-start gap-3 text-rose-700 text-sm animate-fade-in">
+              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Generation Failed</p>
+                <p className="mt-0.5 text-xs text-rose-600">{error}</p>
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={handleGenerate} className="space-y-8">
+            
+            {/* Quick Destination Selectors */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
                 Select or Enter Destination
               </label>
-
-              <div className="flex flex-wrap gap-2 pt-1 pb-2">
-                {DESTINATION_CHIPS.map((chip) => {
-                  const isSelected = formData.destination.toLowerCase() === chip.name.toLowerCase();
-                  return (
-                    <button
-                      key={chip.name}
-                      type="button"
-                      onClick={() => handleSelectChip(chip)}
-                      className={`px-3.5 py-2 rounded-2xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                        isSelected
-                          ? "bg-[#E86A45] text-white shadow-md shadow-[#E86A45]/20 scale-102"
-                          : "bg-[#FAF7F2] hover:bg-[#F2ECE1] border border-[#E3DBD0] text-[#4A443E]"
-                      }`}
-                    >
-                      <span>{chip.emoji}</span>
-                      <span>{chip.name}</span>
-                    </button>
-                  );
-                })}
+              <div className="flex flex-wrap gap-2 mb-4">
+                {popularDestinations.map((dest) => (
+                  <button
+                    key={dest.label}
+                    type="button"
+                    onClick={() => handleSelectPreset(dest.label)}
+                    className={`px-4 py-2 rounded-2xl text-sm font-medium transition-all flex items-center gap-2 border ${
+                      formData.destination.toLowerCase() === dest.label.toLowerCase()
+                        ? "bg-rose-500 text-white border-rose-500 shadow-md shadow-rose-200"
+                        : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100"
+                    }`}
+                  >
+                    <span>{dest.icon}</span>
+                    <span>{dest.label}</span>
+                  </button>
+                ))}
               </div>
 
+              {/* Origin & Destination Inputs */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[11px] font-bold text-[#8C8275] mb-1">
-                    Starting City
-                  </label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Starting City</label>
                   <div className="relative">
-                    <span className="absolute left-3.5 top-3 text-sm">🛫</span>
+                    <MapPin className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
                     <input
                       type="text"
-                      name="origin"
-                      value={formData.origin}
-                      onChange={handleChange}
-                      placeholder="e.g. Mumbai, Delhi, Bengaluru..."
-                      className="w-full pl-10 pr-4 py-3 rounded-2xl border border-[#E3DBD0] focus:border-[#E86A45] focus:outline-none text-sm font-medium text-[#1E1B18] placeholder:text-slate-400/60 bg-transparent"
                       required
+                      value={formData.origin}
+                      onChange={(e) => setFormData({ ...formData, origin: e.target.value })}
+                      placeholder="e.g. Delhi, Mumbai"
+                      className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:bg-white transition text-sm font-medium"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-[#8C8275] mb-1">
-                    Destination City
-                  </label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Destination City</label>
                   <div className="relative">
-                    <span className="absolute left-3.5 top-3 text-sm">📍</span>
+                    <MapPin className="absolute left-3.5 top-3.5 w-4 h-4 text-rose-500" />
                     <input
                       type="text"
-                      name="destination"
-                      value={formData.destination}
-                      onChange={handleChange}
-                      placeholder="e.g. Goa, Jaipur, Manali..."
-                      className="w-full pl-10 pr-4 py-3 rounded-2xl border border-[#E3DBD0] focus:border-[#E86A45] focus:outline-none text-sm font-medium text-[#1E1B18] placeholder:text-slate-400/60 bg-transparent"
                       required
+                      value={formData.destination}
+                      onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
+                      placeholder="e.g. Jaipur, Goa"
+                      className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:bg-white transition text-sm font-medium"
                     />
                   </div>
                 </div>
               </div>
             </div>
 
-            <hr className="border-[#EDE7DC]" />
-
-            <div className="space-y-6">
-              <div className="bg-[#FAF7F2]/60 border border-[#EDE7DC] rounded-2xl p-5 space-y-3">
-                <div className="flex justify-between items-baseline">
-                  <label className="text-xs font-bold text-[#7A7166] uppercase tracking-wider">
-                    Total Estimated Budget
-                  </label>
-                  <span className="font-serif font-extrabold text-2xl text-[#E86A45]">
-                    ₹{formData.totalBudgetINR.toLocaleString("en-IN")}
-                  </span>
-                </div>
-
-                <input
-                  type="range"
-                  name="totalBudgetINR"
-                  min={5000}
-                  max={150000}
-                  step={2000}
-                  value={formData.totalBudgetINR}
-                  onChange={handleChange}
-                  className="w-full h-2 bg-[#E3DBD0] rounded-lg appearance-none cursor-pointer accent-[#E86A45]"
-                />
-
-                <div className="flex justify-between text-[11px] font-semibold text-[#8C8275]">
-                  <span>₹5,000 (Backpacker)</span>
-                  <span>₹75,000 (Comfort)</span>
-                  <span>₹1,50,000 (Luxury)</span>
-                </div>
+            {/* Budget Slider */}
+            <div className="p-6 bg-amber-50/50 rounded-2xl border border-amber-100">
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                  Total Estimated Budget
+                </span>
+                <span className="text-2xl font-bold font-serif text-rose-600">
+                  ₹{Number(formData.totalBudgetINR).toLocaleString("en-IN")}
+                </span>
               </div>
+              <input
+                type="range"
+                min="5000"
+                max="150000"
+                step="2000"
+                value={formData.totalBudgetINR}
+                onChange={(e) => setFormData({ ...formData, totalBudgetINR: Number(e.target.value) })}
+                className="w-full h-2 bg-amber-200 rounded-lg appearance-none cursor-pointer accent-rose-500"
+              />
+              <div className="flex justify-between text-xs text-amber-800/70 mt-2 font-medium">
+                <span>₹5,000 (Backpacker)</span>
+                <span>₹75,000 (Comfort)</span>
+                <span>₹1,50,000 (Luxury)</span>
+              </div>
+            </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-[#FAF7F2]/60 border border-[#EDE7DC] rounded-2xl p-4 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-bold text-[#7A7166] uppercase tracking-wider">
-                      Travelers
-                    </label>
-                    <span className="font-bold text-sm text-[#1E1B18]">
-                      👥 {formData.groupSize} {formData.groupSize === 1 ? "Person" : "People"}
-                    </span>
-                  </div>
+            {/* Dates & Group Size */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Start Date</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
                   <input
-                    type="range"
-                    name="groupSize"
-                    min={1}
-                    max={12}
-                    step={1}
-                    value={formData.groupSize}
-                    onChange={handleChange}
-                    className="w-full h-2 bg-[#E3DBD0] rounded-lg appearance-none cursor-pointer accent-[#E86A45]"
+                    type="date"
+                    required
+                    value={formData.startDate}
+                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:bg-white transition text-sm"
                   />
                 </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#8C8275] mb-1">
-                      Start Date
-                    </label>
-                    <input
-                      type="date"
-                      name="startDate"
-                      value={formData.startDate}
-                      onChange={handleChange}
-                      className="w-full p-2.5 rounded-xl border border-[#E3DBD0] text-xs font-medium text-[#1E1B18] bg-transparent"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#8C8275] mb-1">
-                      End Date
-                    </label>
-                    <input
-                      type="date"
-                      name="endDate"
-                      value={formData.endDate}
-                      onChange={handleChange}
-                      className="w-full p-2.5 rounded-xl border border-[#E3DBD0] text-xs font-medium text-[#1E1B18] bg-transparent"
-                      required
-                    />
-                  </div>
-                </div>
               </div>
-            </div>
 
-            <hr className="border-[#EDE7DC]" />
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
-                <label className="block text-xs font-bold text-[#7A7166] uppercase tracking-wider mb-2">
-                  Primary Transport
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: "flight", label: "✈️ Flight" },
-                    { id: "train", label: "🚆 Train" },
-                    { id: "car", label: "🚗 Car / Cab" },
-                    { id: "bus", label: "🚌 Bus" },
-                  ].map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => setFormData((prev) => ({ ...prev, transportMode: t.id }))}
-                      className={`p-2.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                        formData.transportMode === t.id
-                          ? "bg-[#FCEEEA] border-[#E86A45] text-[#E86A45] ring-1 ring-[#E86A45]"
-                          : "bg-[#FAF7F2]/60 border-[#EDE7DC] hover:border-[#D5CDC0] text-[#4A443E]"
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
+                <label className="block text-xs font-semibold text-gray-600 mb-1">End Date</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
+                  <input
+                    type="date"
+                    required
+                    value={formData.endDate}
+                    onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:bg-white transition text-sm"
+                  />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#7A7166] uppercase tracking-wider mb-2">
-                  Dietary Preference
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: "vegetarian", label: "🌿 Vegetarian" },
-                    { id: "jain", label: "🙏 Jain Friendly" },
-                    { id: "halal", label: "🌙 Halal" },
-                    { id: "no_restrictions", label: "🍲 All Foods" },
-                  ].map((d) => (
-                    <button
-                      key={d.id}
-                      type="button"
-                      onClick={() => setFormData((prev) => ({ ...prev, dietary: d.id }))}
-                      className={`p-2.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                        formData.dietary === d.id
-                          ? "bg-[#FCEEEA] border-[#E86A45] text-[#E86A45] ring-1 ring-[#E86A45]"
-                          : "bg-[#FAF7F2]/60 border-[#EDE7DC] hover:border-[#D5CDC0] text-[#4A443E]"
-                      }`}
-                    >
-                      {d.label}
-                    </button>
-                  ))}
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Travelers</label>
+                <div className="relative">
+                  <Users className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
+                  <select
+                    value={formData.groupSize}
+                    onChange={(e) => setFormData({ ...formData, groupSize: Number(e.target.value) })}
+                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:bg-white transition text-sm font-medium"
+                  >
+                    <option value={1}>Solo (1 Person)</option>
+                    <option value={2}>Couple (2 People)</option>
+                    <option value={4}>Small Group (4 People)</option>
+                    <option value={6}>Family / Group (6+)</option>
+                  </select>
                 </div>
               </div>
             </div>
 
-            <div className="pt-4">
-              <button
-                type="submit"
-                className="w-full py-4 rounded-2xl bg-[#E86A45] hover:bg-[#D95D39] text-white font-bold text-sm shadow-lg shadow-[#E86A45]/25 transition transform active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>✨</span> Generate Detailed Itinerary
-              </button>
+            {/* Transport & Dietary Preferences */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Preferred Transit</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { id: "flight", icon: Plane, label: "Air" },
+                    { id: "train", icon: Train, label: "Rail" },
+                    { id: "bus", icon: Bus, label: "Bus" },
+                    { id: "cab", icon: Car, label: "Cab" },
+                  ].map((mode) => {
+                    const Icon = mode.icon;
+                    const isSelected = formData.transportMode === mode.id;
+                    return (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, transportMode: mode.id })}
+                        className={`py-3 rounded-2xl border text-xs font-semibold flex flex-col items-center gap-1 transition ${
+                          isSelected
+                            ? "border-emerald-600 bg-emerald-50 text-emerald-800 shadow-sm"
+                            : "border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100"
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                        {mode.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Dietary Preference</label>
+                <div className="relative">
+                  <Utensils className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
+                  <select
+                    value={formData.dietary}
+                    onChange={(e) => setFormData({ ...formData, dietary: e.target.value })}
+                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:bg-white transition text-sm font-medium"
+                  >
+                    <option value="vegetarian">Pure Vegetarian</option>
+                    <option value="non-vegetarian">Non-Vegetarian</option>
+                    <option value="vegan">Vegan</option>
+                    <option value="jain">Jain Friendly</option>
+                  </select>
+                </div>
+              </div>
             </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className={`w-full py-4 px-6 rounded-2xl font-bold text-white text-base shadow-lg transition-all flex items-center justify-center gap-3 ${
+                loading
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-emerald-700 hover:bg-emerald-800 shadow-emerald-200 active:scale-[0.99]"
+              }`}
+            >
+              {loading ? (
+                <>
+                  <Sparkles className="w-5 h-5 animate-spin" />
+                  Curating Real-Time Itinerary...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-5 h-5 text-amber-300" />
+                  Generate Detailed Itinerary
+                  <ArrowRight className="w-5 h-5 ml-1" />
+                </>
+              )}
+            </button>
           </form>
-        )}
-      </div>
+        </div>
 
-      <div className="text-center mt-6">
-        <span className="text-[11px] text-[#A69E92]">
-          Real-time pacing, budget estimation, and dynamic interactive mapping.
-        </span>
+        {/* Footer info */}
+        <p className="text-center text-xs text-gray-400 mt-8">
+          Powered by Next.js Serverless Functions & Google Gemini 2.5 Flash
+        </p>
       </div>
     </div>
   );
