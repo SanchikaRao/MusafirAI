@@ -1,4 +1,3 @@
-// app/api/generate-itinerary/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 60;
@@ -21,8 +20,8 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { error: "GEMINI_API_KEY is not configured in Vercel Environment Variables." },
-        { status: 500 }
+        { error: "GEMINI_API_KEY environment variable is not configured in Vercel." },
+        { status: 400 }
       );
     }
 
@@ -43,12 +42,11 @@ export async function POST(req: NextRequest) {
       - Chosen Transit Mode: ${transportMode}
       - Dietary Preference: ${dietary}
 
-      CRITICAL CONTENT REQUIREMENTS:
-      - Use REAL, specific landmarks, verified restaurants, and real local activities in ${destination} (no generic placeholders like "Local Sightseeing").
-      - Allocate realistic costs in INR for ${groupSize} travelers within ₹${totalBudgetINR}.
-      - Return exactly ${numDays} day objects in the "days" array.
+      REQUIREMENTS:
+      - Use REAL, specific landmarks, restaurants, and activities in ${destination} (no generic terms like "Local Sightseeing").
+      - Allocate budget accurately across transport, stays, food, and activities.
+      - Return ONLY valid JSON matching this schema:
 
-      Return ONLY valid JSON matching this schema:
       {
         "tripTitle": "${destination} Getaway",
         "origin": "${origin}",
@@ -72,10 +70,10 @@ export async function POST(req: NextRequest) {
           {
             "mode": "${transportMode}",
             "name": "Transit Connection",
-            "subtext": "Direct travel route connecting ${origin} to ${destination}",
+            "subtext": "Direct route connecting ${origin} to ${destination}",
             "estimatedPriceINR": ${Math.round(totalBudgetINR * 0.25)},
             "highwaysOrRoads": ["Main Route / Corridor"],
-            "tips": "Practical booking and timing advice"
+            "tips": "Practical booking advice"
           }
         ],
         "days": [
@@ -83,14 +81,14 @@ export async function POST(req: NextRequest) {
             "dayNumber": 1,
             "date": "${startDate}",
             "dayLabel": "Day 1",
-            "theme": "Arrival & Iconic Heritage",
+            "theme": "Arrival & Iconic Exploration",
             "aiReasoning": "Curated arrival flow with real local timing",
             "activities": [
               {
                 "id": "act-1-1",
                 "timeSlot": "10:00 AM",
                 "title": "Specific Real Landmark",
-                "description": "Authentic description of the landmark and visit tips",
+                "description": "Authentic description and tips for visiting",
                 "locationName": "${destination}",
                 "lat": 0.0,
                 "lng": 0.0,
@@ -104,45 +102,31 @@ export async function POST(req: NextRequest) {
       }
     `;
 
-    // Try Gemini 3.1 Pro Preview endpoint, falling back to Gemini 2.5 Flash if unavailable
-    const targetModels = ["gemini-3.1-pro-preview", "gemini-2.5-flash", "gemini-1.5-flash"];
-    let rawText = "";
-    let apiError: any = null;
-
-    for (const model of targetModels) {
-      try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: {
-                responseMimeType: "application/json",
-                temperature: 0.3,
-              },
-            }),
-          }
-        );
-
-        const data = await response.json();
-        if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
-          rawText = data.candidates[0].content.parts[0].text;
-          break;
-        } else {
-          apiError = data.error || { message: `Model ${model} returned status ${response.status}` };
-        }
-      } catch (err: any) {
-        apiError = err;
+    // Direct call using gemini-2.5-flash
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.2,
+          },
+        }),
       }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const errorMsg = data.error?.message || `Google API error (Status ${response.status})`;
+      return NextResponse.json({ error: errorMsg }, { status: response.status });
     }
 
-    if (!rawText) {
-      throw new Error(apiError?.message || "All Gemini model endpoints failed to respond.");
-    }
-
-    let rawJson = rawText
+    let rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    rawJson = rawJson
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
       .replace(/```$/i, "")
@@ -153,9 +137,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(itineraryData, { status: 200 });
   } catch (error: any) {
-    console.error("API Route Error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to generate live itinerary." },
+      { error: error.message || "Failed to generate itinerary." },
       { status: 500 }
     );
   }
