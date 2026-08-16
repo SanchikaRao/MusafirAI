@@ -107,7 +107,7 @@ export default function PlannerPage() {
         console.warn("Could not save to Supabase:", authErr);
       }
 
-      router.push(`/itinerary/${itineraryData.id}`);
+      router.push(`/itinerary/`);
     } catch (err: any) {
       setLoading(false);
       setErrorMessage(err.message || "Failed to generate itinerary. Please try again.");
