@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Allow up to 60 seconds on Vercel serverless execution
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
@@ -20,7 +19,6 @@ export async function POST(req: NextRequest) {
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.error("Missing GEMINI_API_KEY in process.env");
       return NextResponse.json(
         { error: "GEMINI_API_KEY is not configured in Vercel Environment Variables." },
         { status: 500 }
@@ -100,9 +98,9 @@ export async function POST(req: NextRequest) {
       }
     `;
 
-    // Direct Gemini API call (model: gemini-2.0-flash)
+    // Using gemini-1.5-flash for universal compatibility
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
