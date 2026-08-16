@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { GoogleGenAI } from "@google/genai";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -8,12 +9,12 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const {
       origin = "Delhi",
-      destination = "Jaipur",
+      destination = "Manali",
       startDate = new Date().toISOString().split("T")[0],
       endDate = new Date(Date.now() + 86400000 * 3).toISOString().split("T")[0],
       groupSize = 2,
-      totalBudgetINR = 35000,
-      transportMode = "train",
+      totalBudgetINR = 25000,
+      transportMode = "flight",
       dietary = "vegetarian",
     } = body;
 
@@ -24,6 +25,8 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+
+    const ai = new GoogleGenAI({ apiKey });
 
     const d1 = new Date(startDate);
     const d2 = new Date(endDate);
@@ -42,7 +45,7 @@ export async function POST(req: NextRequest) {
       - Chosen Transit Mode: ${transportMode}
       - Dietary Preference: ${dietary}
 
-      Return ONLY valid JSON matching this schema with NO markdown fences:
+      Return ONLY valid raw JSON with NO markdown formatting matching this schema:
       {
         "tripTitle": "${destination} Getaway",
         "origin": "${origin}",
@@ -98,33 +101,16 @@ export async function POST(req: NextRequest) {
       }
     `;
 
-    // Using gemini-1.5-flash for universal compatibility
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.2,
-          },
-        }),
-      }
-    );
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        temperature: 0.2,
+      },
+    });
 
-    const geminiData = await geminiRes.json();
-
-    if (!geminiRes.ok) {
-      console.error("Gemini API Error Response:", geminiData);
-      return NextResponse.json(
-        { error: geminiData.error?.message || "Failed to generate content from Gemini API" },
-        { status: geminiRes.status }
-      );
-    }
-
-    let rawJson = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    let rawJson = response.text || "{}";
     rawJson = rawJson
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
