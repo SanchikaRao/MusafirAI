@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { error: "GEMINI_API_KEY is not set in Vercel Environment Variables." },
+        { error: "GEMINI_API_KEY is missing from environment variables." },
         { status: 500 }
       );
     }
@@ -31,18 +31,21 @@ export async function POST(req: NextRequest) {
     const numDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1);
 
     const prompt = `
-      You are an expert AI travel planner for MusafirAI. Build a 100% verified, authentic day-wise travel itinerary for ${origin} to ${destination}.
+      You are an expert AI travel planner for MusafirAI. Build a 100% verified, authentic day-wise travel itinerary for a real trip from ${origin} to ${destination}.
 
       TRIP PARAMETERS:
       - Origin: ${origin}
       - Destination: ${destination}
       - Duration: ${numDays} Days (${startDate} to ${endDate})
-      - Travelers: ${groupSize}
+      - Travelers: ${groupSize} people
       - Total Budget Target: ₹${totalBudgetINR} INR
       - Chosen Transit Mode: ${transportMode}
       - Dietary Preference: ${dietary}
 
-      Return ONLY valid JSON matching this schema with NO markdown fences:
+      REQUIREMENTS:
+      - Provide REAL landmark names, authentic cafes/restaurants, and activities in ${destination}.
+      - Return ONLY valid raw JSON with NO markdown formatting matching this exact schema:
+
       {
         "tripTitle": "${destination} Getaway",
         "origin": "${origin}",
@@ -58,9 +61,9 @@ export async function POST(req: NextRequest) {
           "totalCostINR": ${Number(totalBudgetINR)}
         },
         "stay": {
-          "name": "Recommended Hotel or Resort in ${destination}",
+          "name": "Recommended Hotel in ${destination}",
           "rating": 4.6,
-          "highlight": "Scenic views, central location, verified amenities"
+          "highlight": "Centrally located with verified amenities"
         },
         "transitDetails": [
           {
@@ -68,8 +71,8 @@ export async function POST(req: NextRequest) {
             "name": "Transit Route from ${origin} to ${destination}",
             "subtext": "Direct route connecting ${origin} to ${destination}",
             "estimatedPriceINR": ${Math.round(totalBudgetINR * 0.25)},
-            "highwaysOrRoads": ["Main Route / Express Route"],
-            "tips": "Book advance tickets for best pricing"
+            "highwaysOrRoads": ["Main Route"],
+            "tips": "Book tickets in advance"
           }
         ],
         "days": [
@@ -77,14 +80,14 @@ export async function POST(req: NextRequest) {
             "dayNumber": 1,
             "date": "${startDate}",
             "dayLabel": "Day 1",
-            "theme": "Arrival & Iconic Exploration",
-            "aiReasoning": "Curated arrival flow with real local timing",
+            "theme": "Arrival & Exploration",
+            "aiReasoning": "Curated arrival flow with local timing",
             "activities": [
               {
                 "id": "act-1-1",
                 "timeSlot": "10:00 AM",
                 "title": "Iconic Landmark Visit",
-                "description": "Explore the primary attraction of ${destination}.",
+                "description": "Explore prime attractions in ${destination}.",
                 "locationName": "${destination}",
                 "lat": 0.0,
                 "lng": 0.0,
@@ -98,47 +101,31 @@ export async function POST(req: NextRequest) {
       }
     `;
 
-    // Try Gemini 2.5 Flash, with auto-fallback to Gemini 1.5 Flash if needed
-    const models = ["gemini-2.5-flash", "gemini-1.5-flash"];
-    let rawJson = "";
-    let lastErrorMsg = "";
-
-    for (const model of models) {
-      try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: {
-                responseMimeType: "application/json",
-                temperature: 0.2,
-              },
-            }),
-          }
-        );
-
-        const data = await response.json();
-        if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
-          rawJson = data.candidates[0].content.parts[0].text;
-          break;
-        } else {
-          lastErrorMsg = data.error?.message || `Status ${response.status} from ${model}`;
-        }
-      } catch (err: any) {
-        lastErrorMsg = err.message || "Network error";
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.2,
+          },
+        }),
       }
-    }
+    );
 
-    if (!rawJson) {
+    const data = await res.json();
+
+    if (!res.ok) {
       return NextResponse.json(
-        { error: lastErrorMsg || "Failed to reach Gemini API. Check your API Key." },
-        { status: 500 }
+        { error: data.error?.message || `Google API returned status ${res.status}` },
+        { status: res.status }
       );
     }
 
+    let rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
     rawJson = rawJson
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
@@ -151,7 +138,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(itineraryData, { status: 200 });
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || "Internal server error." },
+      { error: error.message || "Failed to process live itinerary." },
       { status: 500 }
     );
   }
