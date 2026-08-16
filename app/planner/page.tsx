@@ -3,27 +3,12 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { 
-  Compass, 
-  MapPin, 
-  Calendar, 
-  Users, 
-  Sparkles, 
-  ArrowRight, 
-  AlertCircle, 
-  Plane, 
-  Train, 
-  Bus, 
-  Car, 
-  Utensils 
-} from "lucide-react";
 
 export default function PlannerPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Quick preset destinations
   const popularDestinations = [
     { label: "Goa", icon: "🌴" },
     { label: "Jaipur", icon: "🏰" },
@@ -54,7 +39,6 @@ export default function PlannerPage() {
     setError(null);
 
     try {
-      // Direct relative API call to the Next.js serverless route
       const response = await fetch("/api/generate-itinerary", {
         method: "POST",
         headers: {
@@ -69,10 +53,8 @@ export default function PlannerPage() {
         throw new Error(data.error || "Failed to generate itinerary. Please try again.");
       }
 
-      // Cache the generated plan in localStorage for instant access
       localStorage.setItem("current_itinerary", JSON.stringify(data));
 
-      // Navigate to the dynamic itinerary page
       const tripId = data.id || "latest";
       router.push(`/itinerary/${tripId}`);
     } catch (err: any) {
@@ -90,8 +72,7 @@ export default function PlannerPage() {
         {/* Navigation & Header */}
         <div className="flex items-center justify-between mb-8 pb-4 border-b border-gray-200">
           <Link href="/" className="flex items-center gap-2 font-serif text-2xl font-bold text-emerald-800">
-            <Compass className="w-7 h-7 text-emerald-600 animate-spin-slow" />
-            Musafir AI
+            🧭 Musafir AI
           </Link>
           <span className="text-xs uppercase tracking-widest text-emerald-600 font-semibold bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
             AI Travel Studio
@@ -115,8 +96,8 @@ export default function PlannerPage() {
 
           {/* Error Banner */}
           {error && (
-            <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 flex items-start gap-3 text-rose-700 text-sm animate-fade-in">
-              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 flex items-start gap-3 text-rose-700 text-sm">
+              <span className="text-lg">⚠️</span>
               <div>
                 <p className="font-semibold">Generation Failed</p>
                 <p className="mt-0.5 text-xs text-rose-600">{error}</p>
@@ -154,7 +135,7 @@ export default function PlannerPage() {
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Starting City</label>
                   <div className="relative">
-                    <MapPin className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
+                    <span className="absolute left-3.5 top-3.5 text-sm">🛫</span>
                     <input
                       type="text"
                       required
@@ -169,7 +150,7 @@ export default function PlannerPage() {
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Destination City</label>
                   <div className="relative">
-                    <MapPin className="absolute left-3.5 top-3.5 w-4 h-4 text-rose-500" />
+                    <span className="absolute left-3.5 top-3.5 text-sm">📍</span>
                     <input
                       type="text"
                       required
@@ -213,47 +194,38 @@ export default function PlannerPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">Start Date</label>
-                <div className="relative">
-                  <Calendar className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
-                  <input
-                    type="date"
-                    required
-                    value={formData.startDate}
-                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:bg-white transition text-sm"
-                  />
-                </div>
+                <input
+                  type="date"
+                  required
+                  value={formData.startDate}
+                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:bg-white transition text-sm"
+                />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">End Date</label>
-                <div className="relative">
-                  <Calendar className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
-                  <input
-                    type="date"
-                    required
-                    value={formData.endDate}
-                    onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:bg-white transition text-sm"
-                  />
-                </div>
+                <input
+                  type="date"
+                  required
+                  value={formData.endDate}
+                  onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:bg-white transition text-sm"
+                />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">Travelers</label>
-                <div className="relative">
-                  <Users className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
-                  <select
-                    value={formData.groupSize}
-                    onChange={(e) => setFormData({ ...formData, groupSize: Number(e.target.value) })}
-                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:bg-white transition text-sm font-medium"
-                  >
-                    <option value={1}>Solo (1 Person)</option>
-                    <option value={2}>Couple (2 People)</option>
-                    <option value={4}>Small Group (4 People)</option>
-                    <option value={6}>Family / Group (6+)</option>
-                  </select>
-                </div>
+                <select
+                  value={formData.groupSize}
+                  onChange={(e) => setFormData({ ...formData, groupSize: Number(e.target.value) })}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:bg-white transition text-sm font-medium"
+                >
+                  <option value={1}>Solo (1 Person)</option>
+                  <option value={2}>Couple (2 People)</option>
+                  <option value={4}>Small Group (4 People)</option>
+                  <option value={6}>Family / Group (6+)</option>
+                </select>
               </div>
             </div>
 
@@ -263,12 +235,11 @@ export default function PlannerPage() {
                 <label className="block text-xs font-semibold text-gray-600 mb-1">Preferred Transit</label>
                 <div className="grid grid-cols-4 gap-2">
                   {[
-                    { id: "flight", icon: Plane, label: "Air" },
-                    { id: "train", icon: Train, label: "Rail" },
-                    { id: "bus", icon: Bus, label: "Bus" },
-                    { id: "cab", icon: Car, label: "Cab" },
+                    { id: "flight", icon: "✈️", label: "Air" },
+                    { id: "train", icon: "🚆", label: "Rail" },
+                    { id: "bus", icon: "🚌", label: "Bus" },
+                    { id: "cab", icon: "🚗", label: "Cab" },
                   ].map((mode) => {
-                    const Icon = mode.icon;
                     const isSelected = formData.transportMode === mode.id;
                     return (
                       <button
@@ -281,7 +252,7 @@ export default function PlannerPage() {
                             : "border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100"
                         }`}
                       >
-                        <Icon className="w-4 h-4" />
+                        <span className="text-base">{mode.icon}</span>
                         {mode.label}
                       </button>
                     );
@@ -291,19 +262,16 @@ export default function PlannerPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">Dietary Preference</label>
-                <div className="relative">
-                  <Utensils className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
-                  <select
-                    value={formData.dietary}
-                    onChange={(e) => setFormData({ ...formData, dietary: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:bg-white transition text-sm font-medium"
-                  >
-                    <option value="vegetarian">Pure Vegetarian</option>
-                    <option value="non-vegetarian">Non-Vegetarian</option>
-                    <option value="vegan">Vegan</option>
-                    <option value="jain">Jain Friendly</option>
-                  </select>
-                </div>
+                <select
+                  value={formData.dietary}
+                  onChange={(e) => setFormData({ ...formData, dietary: e.target.value })}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:bg-white transition text-sm font-medium"
+                >
+                  <option value="vegetarian">Pure Vegetarian</option>
+                  <option value="non-vegetarian">Non-Vegetarian</option>
+                  <option value="vegan">Vegan</option>
+                  <option value="jain">Jain Friendly</option>
+                </select>
               </div>
             </div>
 
@@ -318,22 +286,14 @@ export default function PlannerPage() {
               }`}
             >
               {loading ? (
-                <>
-                  <Sparkles className="w-5 h-5 animate-spin" />
-                  Curating Real-Time Itinerary...
-                </>
+                <span>✨ Curating Real-Time Itinerary...</span>
               ) : (
-                <>
-                  <Sparkles className="w-5 h-5 text-amber-300" />
-                  Generate Detailed Itinerary
-                  <ArrowRight className="w-5 h-5 ml-1" />
-                </>
+                <span>✨ Generate Detailed Itinerary →</span>
               )}
             </button>
           </form>
         </div>
 
-        {/* Footer info */}
         <p className="text-center text-xs text-gray-400 mt-8">
           Powered by Next.js Serverless Functions & Google Gemini 2.5 Flash
         </p>
