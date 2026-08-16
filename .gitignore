@@ -1,0 +1,26 @@
+# Next.js build outputs
+.next/
+out/
+build/
+dist/
+
+# Dependencies
+node_modules/
+backend/__pycache__/
+backend/*.pyc
+backend/.venv/
+backend/venv/
+backend/env/
+
+# Environment Variables (Never commit keys to GitHub)
+.env
+.env.local
+.env*.local
+backend/.env
+
+# OS / IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
