@@ -1,413 +1,398 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "../../lib/supabase";
 import Link from "next/link";
-import {
-  Compass,
-  MapPin,
-  Calendar,
-  Users,
-  Sparkles,
-  ArrowRight,
-  AlertCircle,
-  Plane,
-  Train,
-  Bus,
-  Car,
-  Utensils,
-  Wallet,
-  ShieldCheck,
-  Zap,
-  Info,
-} from "lucide-react";
+
+interface TripFormData {
+  origin: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+  groupSize: number;
+  totalBudgetINR: number;
+  transportMode: string;
+  dietary: string;
+}
+
+const DESTINATION_CHIPS = [
+  { name: "Goa", emoji: "🌴", origin: "Delhi", defaultBudget: 35000 },
+  { name: "Jaipur", emoji: "🏰", origin: "Delhi", defaultBudget: 22000 },
+  { name: "Udaipur", emoji: "⛵", origin: "Mumbai", defaultBudget: 28000 },
+  { name: "Manali", emoji: "🏔️", origin: "Delhi", defaultBudget: 25000 },
+  { name: "Ooty", emoji: "🌲", origin: "Bengaluru", defaultBudget: 20000 },
+  { name: "Varanasi", emoji: "🛕", origin: "Delhi", defaultBudget: 18000 },
+];
 
 export default function PlannerPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
 
-  const popularDestinations = [
-    { label: "Goa", icon: "🌴", state: "Coastal Paradise" },
-    { label: "Jaipur", icon: "🏰", state: "Heritage & Royalty" },
-    { label: "Udaipur", icon: "⛵", state: "City of Lakes" },
-    { label: "Manali", icon: "🏔️", state: "Himalayan Escape" },
-    { label: "Ooty", icon: "🌲", state: "Nilgiri Hills" },
-    { label: "Varanasi", icon: "🛕", state: "Spiritual Ghats" },
-  ];
-
-  const [formData, setFormData] = useState({
-    origin: "Ghaziabad",
-    destination: "Jaipur",
-    startDate: "2026-09-01",
-    endDate: "2026-09-04",
+  const [formData, setFormData] = useState<TripFormData>({
+    origin: "",
+    destination: "",
+    startDate: new Date().toISOString().split("T")[0],
+    endDate: new Date(Date.now() + 86400000 * 3).toISOString().split("T")[0],
     groupSize: 2,
-    totalBudgetINR: 39000,
-    transportMode: "train",
+    totalBudgetINR: 35000,
+    transportMode: "flight",
     dietary: "vegetarian",
   });
 
-  const handleSelectPreset = (dest: string) => {
-    setFormData((prev) => ({ ...prev, destination: dest }));
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: name === "groupSize" || name === "totalBudgetINR" ? Number(value) : value,
+    }));
   };
 
-  const handleGenerate = async (e: React.FormEvent) => {
+  const handleSelectChip = (chip: typeof DESTINATION_CHIPS[0]) => {
+    setFormData((prev) => ({
+      ...prev,
+      destination: chip.name,
+      origin: chip.origin,
+      totalBudgetINR: chip.defaultBudget,
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.origin.trim() || !formData.destination.trim()) {
+      setErrorMessage("Please enter both starting location and destination.");
+      return;
+    }
+
     setLoading(true);
-    setError(null);
+    setErrorMessage("");
 
     try {
       const response = await fetch("/api/generate-itinerary", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || "Failed to generate itinerary. Please try again.");
+        throw new Error(`Server returned status ${response.status}`);
       }
 
-      localStorage.setItem("current_itinerary", JSON.stringify(data));
+      const itineraryData = await response.json();
+      localStorage.setItem("current_itinerary", JSON.stringify(itineraryData));
 
-      const tripId = data.id || "latest";
-      router.push(`/itinerary/${tripId}`);
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (user) {
+          await supabase.from("trips").insert({
+            user_id: user.id,
+            trip_title: itineraryData.tripTitle || `${formData.destination} Getaway`,
+            origin: formData.origin,
+            destination: formData.destination,
+            start_date: formData.startDate,
+            end_date: formData.endDate,
+            group_size: formData.groupSize,
+            total_budget_inr: formData.totalBudgetINR,
+            transport_mode: formData.transportMode,
+            dietary: formData.dietary,
+            status: "upcoming",
+            itinerary_data: itineraryData,
+          });
+        }
+      } catch (authErr) {
+        console.warn("Could not save to Supabase:", authErr);
+      }
+
+      router.push(`/itinerary/${itineraryData.id}`);
     } catch (err: any) {
-      console.error("Submission Error:", err);
-      setError(err.message || "Failed to fetch itinerary. Check your connection or API keys.");
-    } finally {
       setLoading(false);
+      setErrorMessage(err.message || "Failed to generate itinerary. Please try again.");
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFBF7] text-[#1E293B] py-12 px-4 sm:px-6 lg:px-8 font-sans selection:bg-emerald-100 selection:text-emerald-900">
-      <div className="max-w-4xl mx-auto">
-        
-        {/* Navigation & Header */}
-        <header className="flex items-center justify-between mb-10 pb-6 border-b border-stone-200/80">
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-11 h-11 rounded-2xl bg-emerald-700 flex items-center justify-center text-white shadow-md shadow-emerald-700/20 group-hover:scale-105 transition-transform">
-              <Compass className="w-6 h-6 animate-pulse" />
-            </div>
-            <div>
-              <span className="font-serif text-2xl font-bold tracking-tight text-stone-900 block leading-tight">
-                Musafir AI
-              </span>
-              <span className="text-[11px] font-semibold tracking-wider uppercase text-emerald-700">
-                Verified Smart Itineraries
-              </span>
-            </div>
-          </Link>
-
-          <div className="hidden sm:flex items-center gap-3">
-            <span className="text-xs font-semibold text-stone-600 bg-stone-100 px-3 py-1.5 rounded-full border border-stone-200 flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-              Gemini 2.5 Flash Engine
-            </span>
+    <div className="min-h-screen bg-[#FAF7F2] text-[#2D2A26] py-10 px-4 sm:px-6 flex flex-col justify-between">
+      <div className="max-w-3xl mx-auto w-full flex items-center justify-between mb-6">
+        <Link href="/" className="flex items-center gap-2">
+          <div className="w-9 h-9 rounded-2xl bg-[#E86A45] text-white flex items-center justify-center font-serif text-base font-bold shadow-md shadow-[#E86A45]/20">
+            ✦
           </div>
-        </header>
+          <span className="font-serif font-bold text-xl text-[#1E1B18]">MusafirAI</span>
+        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard"
+            className="text-xs font-semibold text-[#7A7166] hover:text-[#1E1B18] transition"
+          >
+            My Trips
+          </Link>
+          <Link
+            href="/auth"
+            className="text-xs font-bold text-[#E86A45] bg-white px-3.5 py-1.5 rounded-full border border-[#EDE7DC] shadow-2xs hover:bg-[#FAF7F2] transition"
+          >
+            Account / Login
+          </Link>
+        </div>
+      </div>
 
-        {/* Main Card Container */}
-        <main className="bg-white rounded-3xl p-8 sm:p-12 shadow-[0_4px_30px_rgba(0,0,0,0.04)] border border-stone-200/70 relative overflow-hidden">
-          
-          <div className="mb-10 text-center sm:text-left">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 border border-rose-200/60 text-rose-600 text-xs font-bold uppercase tracking-wider mb-3">
-              <Sparkles className="w-3.5 h-3.5" />
-              Plan Your Next Journey
-            </div>
-            <h1 className="text-3xl sm:text-5xl font-serif font-bold text-stone-900 leading-tight">
-              Build your custom itinerary
-            </h1>
-            <p className="text-stone-500 mt-3 text-base sm:text-lg max-w-2xl leading-relaxed">
-              Tailor your route, set your budget slider, and let AI curate your daily verified timeline.
+      <div className="max-w-3xl mx-auto w-full bg-white rounded-3xl p-6 sm:p-10 border border-[#EDE7DC] shadow-sm">
+        <div className="mb-8">
+          <span className="text-[11px] font-bold tracking-widest text-[#E86A45] uppercase">
+            PLAN YOUR ADVENTURE
+          </span>
+          <h1 className="text-3xl sm:text-4xl font-serif font-bold text-[#1E1B18] mt-1">
+            Build your custom itinerary
+          </h1>
+          <p className="text-xs sm:text-sm text-[#7A7166] mt-1.5 font-medium">
+            Tailor your route, set your budget slider, and let AI curate your daily timeline.
+          </p>
+        </div>
+
+        {errorMessage && (
+          <div className="mb-6 p-4 rounded-2xl bg-[#FDEEED] border border-[#F8D2CF] text-[#C53929] text-xs font-bold">
+            {errorMessage}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="py-16 text-center space-y-4">
+            <div className="w-12 h-12 border-4 border-[#E86A45] border-t-transparent rounded-full animate-spin mx-auto" />
+            <h3 className="font-serif font-bold text-xl text-[#1E1B18]">
+              Generating itinerary for {formData.destination || "your trip"}...
+            </h3>
+            <p className="text-xs text-[#7A7166] max-w-sm mx-auto">
+              Calculating daily pacing, finding top stays, and balancing your ₹{formData.totalBudgetINR.toLocaleString("en-IN")} budget.
             </p>
           </div>
-
-          {/* Error Banner */}
-          {error && (
-            <div className="mb-8 p-4 rounded-2xl bg-rose-50/90 border border-rose-200 flex items-start gap-3.5 text-rose-800 text-sm animate-shake">
-              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-rose-600" />
-              <div>
-                <p className="font-semibold">Unable to Generate Itinerary</p>
-                <p className="mt-0.5 text-xs text-rose-700/90 leading-normal">{error}</p>
-              </div>
-            </div>
-          )}
-
-          <form onSubmit={handleGenerate} className="space-y-8">
-            
-            {/* Quick Destination Selectors */}
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-8">
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold uppercase tracking-wider text-stone-500">
-                  Select Popular Destination
-                </label>
-                <span className="text-xs text-stone-400">Click to auto-fill</span>
-              </div>
-              
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
-                {popularDestinations.map((dest) => {
-                  const isSelected = formData.destination.toLowerCase() === dest.label.toLowerCase();
+              <label className="block text-xs font-bold text-[#7A7166] uppercase tracking-wider">
+                Select or Enter Destination
+              </label>
+
+              <div className="flex flex-wrap gap-2 pt-1 pb-2">
+                {DESTINATION_CHIPS.map((chip) => {
+                  const isSelected = formData.destination.toLowerCase() === chip.name.toLowerCase();
                   return (
                     <button
-                      key={dest.label}
+                      key={chip.name}
                       type="button"
-                      onClick={() => handleSelectPreset(dest.label)}
-                      className={`p-3 rounded-2xl border text-left transition-all duration-200 ${
+                      onClick={() => handleSelectChip(chip)}
+                      className={`px-3.5 py-2 rounded-2xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                         isSelected
-                          ? "bg-rose-500 text-white border-rose-500 shadow-md shadow-rose-500/20 scale-[1.02]"
-                          : "bg-stone-50/80 text-stone-700 border-stone-200 hover:bg-stone-100/80 hover:border-stone-300"
+                          ? "bg-[#E86A45] text-white shadow-md shadow-[#E86A45]/20 scale-102"
+                          : "bg-[#FAF7F2] hover:bg-[#F2ECE1] border border-[#E3DBD0] text-[#4A443E]"
                       }`}
                     >
-                      <span className="text-xl block mb-1">{dest.icon}</span>
-                      <span className="font-semibold text-sm block leading-tight">{dest.label}</span>
-                      <span className={`text-[10px] block mt-0.5 ${isSelected ? "text-rose-100" : "text-stone-400"}`}>
-                        {dest.state}
-                      </span>
+                      <span>{chip.emoji}</span>
+                      <span>{chip.name}</span>
                     </button>
                   );
                 })}
               </div>
-            </div>
 
-            {/* Origin & Destination Inputs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-stone-700">Starting City</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                    <MapPin className="w-4 h-4 text-stone-400" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-[#8C8275] mb-1">
+                    Starting City
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-3 text-sm">🛫</span>
+                    <input
+                      type="text"
+                      name="origin"
+                      value={formData.origin}
+                      onChange={handleChange}
+                      placeholder="e.g. Mumbai, Delhi, Bengaluru..."
+                      className="w-full pl-10 pr-4 py-3 rounded-2xl border border-[#E3DBD0] focus:border-[#E86A45] focus:outline-none text-sm font-medium text-[#1E1B18] placeholder:text-slate-400/60 bg-transparent"
+                      required
+                    />
                   </div>
-                  <input
-                    type="text"
-                    required
-                    value={formData.origin}
-                    onChange={(e) => setFormData({ ...formData, origin: e.target.value })}
-                    placeholder="e.g. Delhi, Mumbai, Bengaluru"
-                    className="w-full pl-10 pr-4 py-3.5 bg-stone-50 border border-stone-200 rounded-2xl focus:ring-2 focus:ring-emerald-600 focus:bg-white focus:outline-none transition text-sm font-medium text-stone-800"
-                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-[#8C8275] mb-1">
+                    Destination City
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-3 text-sm">📍</span>
+                    <input
+                      type="text"
+                      name="destination"
+                      value={formData.destination}
+                      onChange={handleChange}
+                      placeholder="e.g. Goa, Jaipur, Manali..."
+                      className="w-full pl-10 pr-4 py-3 rounded-2xl border border-[#E3DBD0] focus:border-[#E86A45] focus:outline-none text-sm font-medium text-[#1E1B18] placeholder:text-slate-400/60 bg-transparent"
+                      required
+                    />
+                  </div>
                 </div>
               </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-stone-700">Destination City</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                    <MapPin className="w-4 h-4 text-rose-500" />
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    value={formData.destination}
-                    onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
-                    placeholder="e.g. Jaipur, Goa, Leh"
-                    className="w-full pl-10 pr-4 py-3.5 bg-stone-50 border border-stone-200 rounded-2xl focus:ring-2 focus:ring-emerald-600 focus:bg-white focus:outline-none transition text-sm font-medium text-stone-800"
-                  />
-                </div>
-              </div>
             </div>
 
-            {/* Budget Slider Card */}
-            <div className="p-6 sm:p-7 bg-[#FFFDF9] rounded-3xl border border-amber-200/70 shadow-sm relative">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-                <div className="flex items-center gap-2">
-                  <Wallet className="w-4 h-4 text-amber-700" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-amber-950">
+            <hr className="border-[#EDE7DC]" />
+
+            <div className="space-y-6">
+              <div className="bg-[#FAF7F2]/60 border border-[#EDE7DC] rounded-2xl p-5 space-y-3">
+                <div className="flex justify-between items-baseline">
+                  <label className="text-xs font-bold text-[#7A7166] uppercase tracking-wider">
                     Total Estimated Budget
+                  </label>
+                  <span className="font-serif font-extrabold text-2xl text-[#E86A45]">
+                    ₹{formData.totalBudgetINR.toLocaleString("en-IN")}
                   </span>
                 </div>
-                <div className="text-2xl sm:text-3xl font-serif font-bold text-rose-600">
-                  ₹{Number(formData.totalBudgetINR).toLocaleString("en-IN")}
+
+                <input
+                  type="range"
+                  name="totalBudgetINR"
+                  min={5000}
+                  max={150000}
+                  step={2000}
+                  value={formData.totalBudgetINR}
+                  onChange={handleChange}
+                  className="w-full h-2 bg-[#E3DBD0] rounded-lg appearance-none cursor-pointer accent-[#E86A45]"
+                />
+
+                <div className="flex justify-between text-[11px] font-semibold text-[#8C8275]">
+                  <span>₹5,000 (Backpacker)</span>
+                  <span>₹75,000 (Comfort)</span>
+                  <span>₹1,50,000 (Luxury)</span>
                 </div>
               </div>
 
-              <input
-                type="range"
-                min="5000"
-                max="150000"
-                step="2000"
-                value={formData.totalBudgetINR}
-                onChange={(e) => setFormData({ ...formData, totalBudgetINR: Number(e.target.value) })}
-                className="w-full h-2.5 bg-amber-200/80 rounded-lg appearance-none cursor-pointer accent-rose-500 transition-all"
-              />
-
-              <div className="flex justify-between text-xs text-amber-900/60 mt-3 font-semibold">
-                <span>₹5,000 (Backpacker)</span>
-                <span>₹75,000 (Comfort)</span>
-                <span>₹1,50,000 (Luxury)</span>
-              </div>
-            </div>
-
-            {/* Dates & Group Size Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-stone-700">Start Date</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                    <Calendar className="w-4 h-4 text-stone-400" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-[#FAF7F2]/60 border border-[#EDE7DC] rounded-2xl p-4 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold text-[#7A7166] uppercase tracking-wider">
+                      Travelers
+                    </label>
+                    <span className="font-bold text-sm text-[#1E1B18]">
+                      👥 {formData.groupSize} {formData.groupSize === 1 ? "Person" : "People"}
+                    </span>
                   </div>
                   <input
-                    type="date"
-                    required
-                    value={formData.startDate}
-                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3 bg-stone-50 border border-stone-200 rounded-2xl focus:ring-2 focus:ring-emerald-600 focus:bg-white focus:outline-none transition text-sm text-stone-800"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-stone-700">End Date</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                    <Calendar className="w-4 h-4 text-stone-400" />
-                  </div>
-                  <input
-                    type="date"
-                    required
-                    value={formData.endDate}
-                    onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3 bg-stone-50 border border-stone-200 rounded-2xl focus:ring-2 focus:ring-emerald-600 focus:bg-white focus:outline-none transition text-sm text-stone-800"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-stone-700">Travelers</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                    <Users className="w-4 h-4 text-stone-400" />
-                  </div>
-                  <select
+                    type="range"
+                    name="groupSize"
+                    min={1}
+                    max={12}
+                    step={1}
                     value={formData.groupSize}
-                    onChange={(e) => setFormData({ ...formData, groupSize: Number(e.target.value) })}
-                    className="w-full pl-10 pr-4 py-3 bg-stone-50 border border-stone-200 rounded-2xl focus:ring-2 focus:ring-emerald-600 focus:bg-white focus:outline-none transition text-sm font-medium text-stone-800 appearance-none cursor-pointer"
-                  >
-                    <option value={1}>Solo (1 Person)</option>
-                    <option value={2}>Couple (2 People)</option>
-                    <option value={4}>Small Group (4 People)</option>
-                    <option value={6}>Family / Group (6+)</option>
-                  </select>
+                    onChange={handleChange}
+                    className="w-full h-2 bg-[#E3DBD0] rounded-lg appearance-none cursor-pointer accent-[#E86A45]"
+                  />
                 </div>
-              </div>
-            </div>
 
-            {/* Transport & Dietary Preferences */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-2">
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold text-stone-700">Preferred Transit</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { id: "flight", icon: Plane, label: "Air" },
-                    { id: "train", icon: Train, label: "Rail" },
-                    { id: "bus", icon: Bus, label: "Bus" },
-                    { id: "cab", icon: Car, label: "Cab" },
-                  ].map((mode) => {
-                    const Icon = mode.icon;
-                    const isSelected = formData.transportMode === mode.id;
-                    return (
-                      <button
-                        key={mode.id}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, transportMode: mode.id })}
-                        className={`py-3 rounded-2xl border text-xs font-semibold flex flex-col items-center gap-1.5 transition-all ${
-                          isSelected
-                            ? "border-emerald-600 bg-emerald-50 text-emerald-800 shadow-sm"
-                            : "border-stone-200 bg-stone-50/80 text-stone-600 hover:bg-stone-100"
-                        }`}
-                      >
-                        <Icon className="w-4 h-4" />
-                        <span>{mode.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold text-stone-700">Dietary Preference</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                    <Utensils className="w-4 h-4 text-stone-400" />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#8C8275] mb-1">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      name="startDate"
+                      value={formData.startDate}
+                      onChange={handleChange}
+                      className="w-full p-2.5 rounded-xl border border-[#E3DBD0] text-xs font-medium text-[#1E1B18] bg-transparent"
+                      required
+                    />
                   </div>
-                  <select
-                    value={formData.dietary}
-                    onChange={(e) => setFormData({ ...formData, dietary: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3 bg-stone-50 border border-stone-200 rounded-2xl focus:ring-2 focus:ring-emerald-600 focus:bg-white focus:outline-none transition text-sm font-medium text-stone-800 appearance-none cursor-pointer"
-                  >
-                    <option value="vegetarian">Pure Vegetarian</option>
-                    <option value="non-vegetarian">Non-Vegetarian</option>
-                    <option value="vegan">Vegan</option>
-                    <option value="jain">Jain Friendly</option>
-                  </select>
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#8C8275] mb-1">
+                      End Date
+                    </label>
+                    <input
+                      type="date"
+                      name="endDate"
+                      value={formData.endDate}
+                      onChange={handleChange}
+                      className="w-full p-2.5 rounded-xl border border-[#E3DBD0] text-xs font-medium text-[#1E1B18] bg-transparent"
+                      required
+                    />
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Submit CTA */}
+            <hr className="border-[#EDE7DC]" />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-xs font-bold text-[#7A7166] uppercase tracking-wider mb-2">
+                  Primary Transport
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: "flight", label: "✈️ Flight" },
+                    { id: "train", label: "🚆 Train" },
+                    { id: "car", label: "🚗 Car / Cab" },
+                    { id: "bus", label: "🚌 Bus" },
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setFormData((prev) => ({ ...prev, transportMode: t.id }))}
+                      className={`p-2.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                        formData.transportMode === t.id
+                          ? "bg-[#FCEEEA] border-[#E86A45] text-[#E86A45] ring-1 ring-[#E86A45]"
+                          : "bg-[#FAF7F2]/60 border-[#EDE7DC] hover:border-[#D5CDC0] text-[#4A443E]"
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#7A7166] uppercase tracking-wider mb-2">
+                  Dietary Preference
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: "vegetarian", label: "🌿 Vegetarian" },
+                    { id: "jain", label: "🙏 Jain Friendly" },
+                    { id: "halal", label: "🌙 Halal" },
+                    { id: "no_restrictions", label: "🍲 All Foods" },
+                  ].map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => setFormData((prev) => ({ ...prev, dietary: d.id }))}
+                      className={`p-2.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                        formData.dietary === d.id
+                          ? "bg-[#FCEEEA] border-[#E86A45] text-[#E86A45] ring-1 ring-[#E86A45]"
+                          : "bg-[#FAF7F2]/60 border-[#EDE7DC] hover:border-[#D5CDC0] text-[#4A443E]"
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             <div className="pt-4">
               <button
                 type="submit"
-                disabled={loading}
-                className={`w-full py-4 px-6 rounded-2xl font-bold text-white text-base shadow-xl transition-all duration-300 flex items-center justify-center gap-3 ${
-                  loading
-                    ? "bg-stone-400 cursor-not-allowed"
-                    : "bg-emerald-700 hover:bg-emerald-800 shadow-emerald-700/25 active:scale-[0.99]"
-                }`}
+                className="w-full py-4 rounded-2xl bg-[#E86A45] hover:bg-[#D95D39] text-white font-bold text-sm shadow-lg shadow-[#E86A45]/25 transition transform active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
               >
-                {loading ? (
-                  <>
-                    <Sparkles className="w-5 h-5 animate-spin" />
-                    <span>Curating Real-Time Itinerary...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-5 h-5 text-amber-300" />
-                    <span>Generate Detailed Itinerary</span>
-                    <ArrowRight className="w-5 h-5 ml-1 group-hover:translate-x-1 transition-transform" />
-                  </>
-                )}
+                <span>✨</span> Generate Detailed Itinerary
               </button>
             </div>
           </form>
-        </main>
+        )}
+      </div>
 
-        {/* Feature Badges Footer */}
-        <footer className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center sm:text-left">
-          <div className="flex items-center gap-3 p-4 rounded-2xl bg-white/60 border border-stone-200/50">
-            <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 flex-shrink-0">
-              <ShieldCheck className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-stone-800">Verified Routes</p>
-              <p className="text-[11px] text-stone-500">Real travel times & NH connections</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 p-4 rounded-2xl bg-white/60 border border-stone-200/50">
-            <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 flex-shrink-0">
-              <Wallet className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-stone-800">Dynamic Budgets</p>
-              <p className="text-[11px] text-stone-500">Realistic split for stay & transit</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 p-4 rounded-2xl bg-white/60 border border-stone-200/50">
-            <div className="w-8 h-8 rounded-xl bg-rose-100 flex items-center justify-center text-rose-700 flex-shrink-0">
-              <Info className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-stone-800">Instant Export</p>
-              <p className="text-[11px] text-stone-500">Save to Supabase or view offline</p>
-            </div>
-          </div>
-        </footer>
+      <div className="text-center mt-6">
+        <span className="text-[11px] text-[#A69E92]">
+          Real-time pacing, budget estimation, and dynamic interactive mapping.
+        </span>
       </div>
     </div>
   );
