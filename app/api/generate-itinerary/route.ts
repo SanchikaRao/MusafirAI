@@ -20,8 +20,8 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { error: "GEMINI_API_KEY environment variable is not configured in Vercel." },
-        { status: 400 }
+        { error: "GEMINI_API_KEY is not set in Vercel Environment Variables." },
+        { status: 500 }
       );
     }
 
@@ -31,22 +31,18 @@ export async function POST(req: NextRequest) {
     const numDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1);
 
     const prompt = `
-      You are an expert AI travel planner for MusafirAI. Build a 100% verified, authentic, day-wise travel itinerary for a real trip from ${origin} to ${destination}.
+      You are an expert AI travel planner for MusafirAI. Build a 100% verified, authentic day-wise travel itinerary for ${origin} to ${destination}.
 
       TRIP PARAMETERS:
       - Origin: ${origin}
       - Destination: ${destination}
       - Duration: ${numDays} Days (${startDate} to ${endDate})
-      - Travelers: ${groupSize} people
+      - Travelers: ${groupSize}
       - Total Budget Target: ₹${totalBudgetINR} INR
       - Chosen Transit Mode: ${transportMode}
       - Dietary Preference: ${dietary}
 
-      REQUIREMENTS:
-      - Use REAL, specific landmarks, restaurants, and activities in ${destination} (no generic terms like "Local Sightseeing").
-      - Allocate budget accurately across transport, stays, food, and activities.
-      - Return ONLY valid JSON matching this schema:
-
+      Return ONLY valid JSON matching this schema with NO markdown fences:
       {
         "tripTitle": "${destination} Getaway",
         "origin": "${origin}",
@@ -62,18 +58,18 @@ export async function POST(req: NextRequest) {
           "totalCostINR": ${Number(totalBudgetINR)}
         },
         "stay": {
-          "name": "Specific Hotel / Resort Name in ${destination}",
+          "name": "Recommended Hotel or Resort in ${destination}",
           "rating": 4.6,
-          "highlight": "Location highlights and verified amenities"
+          "highlight": "Scenic views, central location, verified amenities"
         },
         "transitDetails": [
           {
             "mode": "${transportMode}",
-            "name": "Transit Connection",
+            "name": "Transit Route from ${origin} to ${destination}",
             "subtext": "Direct route connecting ${origin} to ${destination}",
             "estimatedPriceINR": ${Math.round(totalBudgetINR * 0.25)},
-            "highwaysOrRoads": ["Main Route / Corridor"],
-            "tips": "Practical booking advice"
+            "highwaysOrRoads": ["Main Route / Express Route"],
+            "tips": "Book advance tickets for best pricing"
           }
         ],
         "days": [
@@ -87,8 +83,8 @@ export async function POST(req: NextRequest) {
               {
                 "id": "act-1-1",
                 "timeSlot": "10:00 AM",
-                "title": "Specific Real Landmark",
-                "description": "Authentic description and tips for visiting",
+                "title": "Iconic Landmark Visit",
+                "description": "Explore the primary attraction of ${destination}.",
                 "locationName": "${destination}",
                 "lat": 0.0,
                 "lng": 0.0,
@@ -102,30 +98,47 @@ export async function POST(req: NextRequest) {
       }
     `;
 
-    // Direct call using gemini-2.5-flash
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.2,
-          },
-        }),
+    // Try Gemini 2.5 Flash, with auto-fallback to Gemini 1.5 Flash if needed
+    const models = ["gemini-2.5-flash", "gemini-1.5-flash"];
+    let rawJson = "";
+    let lastErrorMsg = "";
+
+    for (const model of models) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                responseMimeType: "application/json",
+                temperature: 0.2,
+              },
+            }),
+          }
+        );
+
+        const data = await response.json();
+        if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+          rawJson = data.candidates[0].content.parts[0].text;
+          break;
+        } else {
+          lastErrorMsg = data.error?.message || `Status ${response.status} from ${model}`;
+        }
+      } catch (err: any) {
+        lastErrorMsg = err.message || "Network error";
       }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      const errorMsg = data.error?.message || `Google API error (Status ${response.status})`;
-      return NextResponse.json({ error: errorMsg }, { status: response.status });
     }
 
-    let rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    if (!rawJson) {
+      return NextResponse.json(
+        { error: lastErrorMsg || "Failed to reach Gemini API. Check your API Key." },
+        { status: 500 }
+      );
+    }
+
     rawJson = rawJson
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
@@ -138,7 +151,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(itineraryData, { status: 200 });
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || "Failed to generate itinerary." },
+      { error: error.message || "Internal server error." },
       { status: 500 }
     );
   }
