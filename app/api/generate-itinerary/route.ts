@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
+
+// Allow up to 60 seconds on Vercel serverless execution
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const {
       origin = "Delhi",
       destination = "Jaipur",
@@ -17,14 +20,12 @@ export async function POST(req: NextRequest) {
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.error("Missing GEMINI_API_KEY environment variable");
+      console.error("Missing GEMINI_API_KEY in process.env");
       return NextResponse.json(
         { error: "GEMINI_API_KEY is not configured in Vercel Environment Variables." },
         { status: 500 }
       );
     }
-
-    const ai = new GoogleGenAI({ apiKey });
 
     const d1 = new Date(startDate);
     const d2 = new Date(endDate);
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
       - Chosen Transit Mode: ${transportMode}
       - Dietary Preference: ${dietary}
 
-      Return ONLY valid raw JSON with no Markdown formatting matching this schema:
+      Return ONLY valid JSON matching this schema with NO markdown fences:
       {
         "tripTitle": "${destination} Getaway",
         "origin": "${origin}",
@@ -99,17 +100,33 @@ export async function POST(req: NextRequest) {
       }
     `;
 
-    // Updated model to gemini-2.0-flash
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        temperature: 0.2,
-      },
-    });
+    // Direct Gemini API call (model: gemini-2.0-flash)
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.2,
+          },
+        }),
+      }
+    );
 
-    let rawJson = response.text || "{}";
+    const geminiData = await geminiRes.json();
+
+    if (!geminiRes.ok) {
+      console.error("Gemini API Error Response:", geminiData);
+      return NextResponse.json(
+        { error: geminiData.error?.message || "Failed to generate content from Gemini API" },
+        { status: geminiRes.status }
+      );
+    }
+
+    let rawJson = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
     rawJson = rawJson
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
@@ -121,9 +138,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(itineraryData);
   } catch (error: any) {
-    console.error("API Route Error:", error);
+    console.error("API Handler Error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to generate itinerary" },
+      { error: error.message || "Failed to process itinerary request." },
       { status: 500 }
     );
   }
