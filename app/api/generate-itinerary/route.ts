@@ -5,20 +5,21 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const {
-      origin,
-      destination,
-      startDate,
-      endDate,
-      groupSize,
-      totalBudgetINR,
-      transportMode,
-      dietary,
+      origin = "Delhi",
+      destination = "Jaipur",
+      startDate = new Date().toISOString().split("T")[0],
+      endDate = new Date(Date.now() + 86400000 * 3).toISOString().split("T")[0],
+      groupSize = 2,
+      totalBudgetINR = 35000,
+      transportMode = "train",
+      dietary = "vegetarian",
     } = body;
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
+      console.error("Missing GEMINI_API_KEY environment variable");
       return NextResponse.json(
-        { error: "GEMINI_API_KEY is not configured" },
+        { error: "GEMINI_API_KEY is not configured in Vercel Environment Variables." },
         { status: 500 }
       );
     }
@@ -33,15 +34,16 @@ export async function POST(req: NextRequest) {
     const prompt = `
       You are an expert AI travel planner for MusafirAI. Build a 100% verified, authentic itinerary for ${origin} to ${destination}.
 
-      TRIP CONSTRAINTS:
-      - Route: ${origin} to ${destination}
+      TRIP PARAMETERS:
+      - Origin: ${origin}
+      - Destination: ${destination}
       - Duration: ${numDays} Days (${startDate} to ${endDate})
       - Travelers: ${groupSize}
       - Total Budget Target: ₹${totalBudgetINR} INR
       - Chosen Transit Mode: ${transportMode}
       - Dietary Preference: ${dietary}
 
-      REQUIRED JSON STRUCTURE ONLY:
+      Return ONLY valid raw JSON with no Markdown formatting matching this schema:
       {
         "tripTitle": "${destination} Getaway",
         "origin": "${origin}",
@@ -51,24 +53,24 @@ export async function POST(req: NextRequest) {
         "transportMode": "${transportMode}",
         "dietary": "${dietary}",
         "budgetBreakdown": {
-          "transportCostINR": ${Math.round(totalBudgetINR * 0.2)},
+          "transportCostINR": ${Math.round(totalBudgetINR * 0.25)},
           "stayCostINR": ${Math.round(totalBudgetINR * 0.45)},
-          "foodAndActivitiesCostINR": ${Math.round(totalBudgetINR * 0.35)},
+          "foodAndActivitiesCostINR": ${Math.round(totalBudgetINR * 0.30)},
           "totalCostINR": ${totalBudgetINR}
         },
         "stay": {
-          "name": "Recommended Stay in ${destination}",
+          "name": "Recommended Hotel in ${destination}",
           "rating": 4.5,
-          "highlight": "Central prime location"
+          "highlight": "Centrally located with verified amenities"
         },
         "transitDetails": [
           {
             "mode": "${transportMode}",
-            "name": "Verified transit route",
-            "subtext": "Timing and station details",
-            "estimatedPriceINR": 2500,
-            "highwaysOrRoads": ["NH 48"],
-            "tips": "Recommended travel tip"
+            "name": "Primary Transit Connection",
+            "subtext": "Direct route connecting ${origin} to ${destination}",
+            "estimatedPriceINR": ${Math.round(totalBudgetINR * 0.25)},
+            "highwaysOrRoads": ["Main Route"],
+            "tips": "Book advance tickets for best rates"
           }
         ],
         "days": [
@@ -77,13 +79,13 @@ export async function POST(req: NextRequest) {
             "date": "${startDate}",
             "dayLabel": "Day 1",
             "theme": "Arrival & Exploration",
-            "aiReasoning": "Paced schedule for ${destination}.",
+            "aiReasoning": "Optimized exploration schedule for ${destination}.",
             "activities": [
               {
                 "id": "act-1",
-                "timeSlot": "09:30 AM",
-                "title": "Main Attraction in ${destination}",
-                "description": "Highlights and exploration.",
+                "timeSlot": "10:00 AM",
+                "title": "Iconic Landmark Visit",
+                "description": "Explore prime attractions and historic sites.",
                 "locationName": "${destination}",
                 "lat": 0.0,
                 "lng": 0.0,
@@ -97,24 +99,25 @@ export async function POST(req: NextRequest) {
       }
     `;
 
+    // Updated model to gemini-2.0-flash
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
-        temperature: 0.3,
+        temperature: 0.2,
       },
     });
 
     let rawJson = response.text || "{}";
     rawJson = rawJson
-      .replace(/^```json\s*/, "")
-      .replace(/^```\s*/, "")
-      .replace(/```$/, "")
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/```$/i, "")
       .trim();
 
     const itineraryData = JSON.parse(rawJson);
-    itineraryData.id = `${destination.toLowerCase().replace(/\s+/g, "-")}-${Date.now().toString(36)}`;
+    itineraryData.id = `${(destination || "trip").toLowerCase().replace(/\s+/g, "-")}-${Date.now().toString(36)}`;
 
     return NextResponse.json(itineraryData);
   } catch (error: any) {
