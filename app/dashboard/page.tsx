@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "../../lib/supabase";
 import Link from "next/link";
 
 interface TripRecord {
@@ -32,7 +32,6 @@ export default function DashboardPage() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        // Fallback for local cache when not authenticated
         const localSaved = localStorage.getItem("current_itinerary");
         if (localSaved) {
           try {
@@ -77,7 +76,6 @@ export default function DashboardPage() {
     e.stopPropagation();
     const newStatus = currentStatus === "upcoming" ? "completed" : "upcoming";
 
-    // Optimistic UI state update
     setTrips((prev) =>
       prev.map((t) => (t.id === tripId ? { ...t, status: newStatus as any } : t))
     );
@@ -94,7 +92,6 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-[#FAF7F2] text-[#2D2A26] pb-20 selection:bg-[#E86A45] selection:text-white">
-      {/* Navigation */}
       <nav className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between border-b border-[#EDE7DC]">
         <Link href="/" className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-xl bg-[#E86A45] text-white flex items-center justify-center font-serif text-sm font-bold shadow-md shadow-[#E86A45]/20">
@@ -124,7 +121,6 @@ export default function DashboardPage() {
         </div>
       </nav>
 
-      {/* Main Content */}
       <main className="max-w-6xl mx-auto px-6 pt-10">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
@@ -136,7 +132,6 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* Status Tab Toggle */}
           <div className="inline-flex bg-white p-1 rounded-2xl border border-[#EDE7DC] shadow-xs">
             <button
               onClick={() => setActiveTab("upcoming")}
@@ -161,7 +156,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Trips List */}
         {loading ? (
           <div className="py-20 text-center">
             <div className="w-10 h-10 border-4 border-[#E86A45] border-t-transparent rounded-full animate-spin mx-auto mb-3" />

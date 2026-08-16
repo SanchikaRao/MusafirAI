@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "../../lib/supabase";
 import Link from "next/link";
 
 interface TripFormData {
@@ -84,7 +84,6 @@ export default function PlannerPage() {
       const itineraryData = await response.json();
       localStorage.setItem("current_itinerary", JSON.stringify(itineraryData));
 
-      // Auto-save trip if user is logged into Supabase
       try {
         const {
           data: { user },
@@ -119,7 +118,6 @@ export default function PlannerPage() {
 
   return (
     <div className="min-h-screen bg-[#FAF7F2] text-[#2D2A26] py-10 px-4 sm:px-6 flex flex-col justify-between">
-      {/* Top Header */}
       <div className="max-w-3xl mx-auto w-full flex items-center justify-between mb-6">
         <Link href="/" className="flex items-center gap-2">
           <div className="w-9 h-9 rounded-2xl bg-[#E86A45] text-white flex items-center justify-center font-serif text-base font-bold shadow-md shadow-[#E86A45]/20">
@@ -143,7 +141,6 @@ export default function PlannerPage() {
         </div>
       </div>
 
-      {/* Main Planning Form */}
       <div className="max-w-3xl mx-auto w-full bg-white rounded-3xl p-6 sm:p-10 border border-[#EDE7DC] shadow-sm">
         <div className="mb-8">
           <span className="text-[11px] font-bold tracking-widest text-[#E86A45] uppercase">
@@ -175,7 +172,6 @@ export default function PlannerPage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-8">
-            {/* 1. Destination Section */}
             <div className="space-y-3">
               <label className="block text-xs font-bold text-[#7A7166] uppercase tracking-wider">
                 Select or Enter Destination
@@ -243,7 +239,6 @@ export default function PlannerPage() {
 
             <hr className="border-[#EDE7DC]" />
 
-            {/* 2. Budget & Group Size Sliders */}
             <div className="space-y-6">
               <div className="bg-[#FAF7F2]/60 border border-[#EDE7DC] rounded-2xl p-5 space-y-3">
                 <div className="flex justify-between items-baseline">
@@ -328,7 +323,6 @@ export default function PlannerPage() {
 
             <hr className="border-[#EDE7DC]" />
 
-            {/* 3. Transport & Dietary Preferences */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
                 <label className="block text-xs font-bold text-[#7A7166] uppercase tracking-wider mb-2">
@@ -385,7 +379,6 @@ export default function PlannerPage() {
               </div>
             </div>
 
-            {/* Submit Action */}
             <div className="pt-4">
               <button
                 type="submit"

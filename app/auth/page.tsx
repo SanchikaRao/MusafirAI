@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "../../lib/supabase";
 import Link from "next/link";
 
 export default function AuthPage() {
@@ -16,7 +16,7 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: "error" | "success" } | null>(null);
 
-  // 1. Google OAuth Login
+  // 1. Google OAuth
   const handleGoogleLogin = async () => {
     setLoading(true);
     setMessage(null);
@@ -70,7 +70,7 @@ export default function AuthPage() {
     setLoading(false);
   };
 
-  // 3. Phone OTP Sending & Verification
+  // 3. Phone OTP Verification
   const handleSendPhoneOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -111,7 +111,6 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen bg-[#FAF7F2] flex flex-col justify-center items-center py-12 px-4 sm:px-6 selection:bg-[#E86A45] selection:text-white">
       <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-[#EDE7DC] shadow-sm">
-        {/* Brand Header */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-3">
             <div className="w-10 h-10 rounded-2xl bg-[#E86A45] text-white flex items-center justify-center font-serif text-lg font-bold shadow-md shadow-[#E86A45]/20">
@@ -171,7 +170,6 @@ export default function AuthPage() {
           </button>
         </div>
 
-        {/* Status Alerts */}
         {message && (
           <div
             className={`mb-5 p-3.5 rounded-2xl text-xs font-bold border ${
@@ -184,7 +182,6 @@ export default function AuthPage() {
           </div>
         )}
 
-        {/* Google & Email Forms */}
         {authMode !== "phone" && (
           <div className="space-y-4">
             <button
@@ -261,7 +258,6 @@ export default function AuthPage() {
           </div>
         )}
 
-        {/* Phone OTP Auth Form */}
         {authMode === "phone" && (
           <div className="space-y-4">
             {!otpSent ? (
