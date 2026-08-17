@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
       REQUIREMENTS:
       - Use REAL, specific landmarks, authentic restaurants, and activities in ${destination}.
       - Allocate budget realistically across transport, stays, food, and activities.
-      - Return ONLY valid raw JSON with NO markdown formatting matching this exact schema:
+      - Return ONLY valid raw JSON matching this schema:
 
       {
         "tripTitle": "${destination} Getaway",
@@ -102,17 +102,21 @@ export async function POST(req: NextRequest) {
       }
     `;
 
-    // Active production model supported on v1beta
+    // Google Interactions API Endpoint
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      "https://generativelanguage.googleapis.com/v1beta/interactions",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.2,
+          model: "gemini-3.6-flash",
+          input: prompt,
+          response_format: {
+            type: "text",
+            mime_type: "application/json",
           },
         }),
       }
@@ -127,14 +131,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-    rawJson = rawJson
+    // Extract text from the Interactions API response schema
+    let rawText =
+      data.output_text ||
+      data.outputs?.[data.outputs.length - 1]?.text ||
+      data.steps?.find((s: any) => s.type === "model_output")?.text ||
+      data.steps?.find((s: any) => s.type === "model_output")?.content ||
+      "{}";
+
+    if (typeof rawText !== "string") {
+      rawText = JSON.stringify(rawText);
+    }
+
+    let cleanJson = rawText
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
       .replace(/```$/i, "")
       .trim();
 
-    const itineraryData = JSON.parse(rawJson);
+    const itineraryData = JSON.parse(cleanJson);
     itineraryData.id = `${(destination || "trip").toLowerCase().replace(/\s+/g, "-")}-${Date.now().toString(36)}`;
 
     return NextResponse.json(itineraryData, { status: 200 });
