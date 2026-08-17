@@ -75,12 +75,18 @@ export default function PlannerPage() {
         body: JSON.stringify(formData),
       });
 
+      const data = await response.json().catch(() => ({}));
+
       if (!response.ok) {
-        throw new Error(`Server returned status ${response.status}`);
+        throw new Error(data.error || `Server returned status ${response.status}`);
       }
 
-      const itineraryData = await response.json();
+      const itineraryData = data;
+      // Store both keys so any itinerary reader page can find it instantly
       localStorage.setItem("current_itinerary", JSON.stringify(itineraryData));
+      if (itineraryData.id) {
+        localStorage.setItem(`itinerary_${itineraryData.id}`, JSON.stringify(itineraryData));
+      }
 
       try {
         const {
