@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     const numDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1);
 
     const prompt = `
-      You are an expert AI travel planner for MusafirAI. Build a 100% verified, authentic day-wise travel itinerary for a real trip from ${origin} to ${destination}.
+      You are an expert AI travel planner for MusafirAI. Build an authentic day-wise travel itinerary for a trip from ${origin} to ${destination}.
 
       TRIP PARAMETERS:
       - Origin: ${origin}
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       - Preferred Transit: ${transportMode}
       - Dietary: ${dietary}
 
-      CRITICAL: Return ONLY valid raw JSON matching this schema:
+      Return ONLY valid JSON matching this schema:
       {
         "tripTitle": "${destination} Exploration",
         "origin": "${origin}",
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
         "stay": {
           "name": "Recommended Hotel in ${destination}",
           "rating": 4.6,
-          "highlight": "Scenic views and verified amenities in central ${destination}"
+          "highlight": "Centrally located accommodation in ${destination}"
         },
         "transitDetails": [
           {
@@ -77,13 +77,13 @@ export async function POST(req: NextRequest) {
             "dayNumber": 1,
             "date": "${startDate}",
             "dayLabel": "Day 1",
-            "theme": "Arrival & Initial Exploration",
+            "theme": "Arrival & Exploration",
             "aiReasoning": "Curated arrival flow with authentic local timing",
             "activities": [
               {
                 "id": "act-1-1",
                 "timeSlot": "10:00 AM",
-                "title": "Iconic Landmark Visit",
+                "title": "Local Exploration",
                 "description": "Explore prime attractions in ${destination}.",
                 "locationName": "${destination}",
                 "lat": 0.0,
@@ -126,43 +126,34 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Comprehensive extractor across all Interactions API response shapes
-    let rawText = "";
+    // Safely extract text and enforce string conversion
+    let extractedContent: any =
+      data.output_text ??
+      (Array.isArray(data.outputs) ? data.outputs[data.outputs.length - 1] : null) ??
+      (Array.isArray(data.steps) ? data.steps.find((s: any) => s.type === "model_output") : null) ??
+      (data.candidates?.[0]?.content?.parts?.[0]?.text ?? "");
 
-    if (typeof data.output_text === "string" && data.output_text.trim()) {
-      rawText = data.output_text;
-    } else if (Array.isArray(data.outputs)) {
-      const lastOutput = data.outputs[data.outputs.length - 1];
-      rawText = typeof lastOutput === "string" ? lastOutput : lastOutput?.text || "";
-    } else if (Array.isArray(data.steps)) {
-      for (let i = data.steps.length - 1; i >= 0; i--) {
-        const step = data.steps[i];
-        if (step.type === "model_output" || step.text || step.content) {
-          rawText = step.text || step.content || "";
-          break;
-        }
-      }
-    } else if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-      rawText = data.candidates[0].content.parts[0].text;
+    if (typeof extractedContent === "object" && extractedContent !== null) {
+      extractedContent = extractedContent.text || extractedContent.content || JSON.stringify(extractedContent);
     }
 
-    // Clean JSON markdown wrappers if present
-    let cleanJson = (rawText || "")
+    const safeString = String(extractedContent || "");
+
+    const cleanJson = safeString
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
       .replace(/```$/i, "")
       .trim();
 
     let itineraryData: any = {};
-
     try {
       itineraryData = JSON.parse(cleanJson);
     } catch {
       itineraryData = {};
     }
 
-    // Safe fallbacks guarantee that no fields ever show "undefined"
-    itineraryData.id = `${(destination || "trip").toLowerCase().replace(/\s+/g, "-")}-${Date.now().toString(36)}`;
+    // Default fallbacks to prevent undefined values
+    itineraryData.id = `${String(destination || "trip").toLowerCase().replace(/\s+/g, "-")}-${Date.now().toString(36)}`;
     itineraryData.origin = itineraryData.origin || origin;
     itineraryData.destination = itineraryData.destination || destination;
     itineraryData.tripTitle = itineraryData.tripTitle || `${destination} Complete Itinerary`;
@@ -202,7 +193,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(itineraryData, { status: 200 });
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || "Failed to generate itinerary." },
+      { error: error?.message || "Failed to process live itinerary." },
       { status: 500 }
     );
   }
