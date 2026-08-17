@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
       REQUIREMENTS:
       - Use REAL, specific landmarks, authentic restaurants, and activities in ${destination}.
       - Allocate budget realistically across transport, stays, food, and activities.
-      - Return ONLY valid JSON matching this schema:
+      - Return ONLY valid raw JSON with NO markdown formatting matching this exact schema:
 
       {
         "tripTitle": "${destination} Getaway",
@@ -102,60 +102,45 @@ export async function POST(req: NextRequest) {
       }
     `;
 
-    // Active production models supported on standard v1beta endpoints
-    const activeModels = ["gemini-2.0-flash", "gemini-1.5-flash"];
-    let rawJsonText = "";
-    let lastErrorMsg = "";
-
-    for (const model of activeModels) {
-      try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: {
-                responseMimeType: "application/json",
-                temperature: 0.2,
-              },
-            }),
-          }
-        );
-
-        const data = await response.json();
-        if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
-          rawJsonText = data.candidates[0].content.parts[0].text;
-          break;
-        } else {
-          lastErrorMsg = data.error?.message || `Status ${response.status} from ${model}`;
-        }
-      } catch (err: any) {
-        lastErrorMsg = err.message || "Network connection failure.";
+    // Active production model supported on v1beta
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.2,
+          },
+        }),
       }
-    }
+    );
 
-    if (!rawJsonText) {
+    const data = await response.json();
+
+    if (!response.ok) {
       return NextResponse.json(
-        { error: lastErrorMsg || "Failed to reach Google Gemini API." },
-        { status: 500 }
+        { error: data.error?.message || `Google API returned status ${response.status}` },
+        { status: response.status }
       );
     }
 
-    let cleanJson = rawJsonText
+    let rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    rawJson = rawJson
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
       .replace(/```$/i, "")
       .trim();
 
-    const itineraryData = JSON.parse(cleanJson);
+    const itineraryData = JSON.parse(rawJson);
     itineraryData.id = `${(destination || "trip").toLowerCase().replace(/\s+/g, "-")}-${Date.now().toString(36)}`;
 
     return NextResponse.json(itineraryData, { status: 200 });
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || "Internal server error." },
+      { error: error.message || "Failed to process live itinerary." },
       { status: 500 }
     );
   }
