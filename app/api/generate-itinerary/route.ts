@@ -7,10 +7,6 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // --------------------------------------------------
-    // USER INPUT
-    // --------------------------------------------------
-
     const {
       origin,
       destination,
@@ -23,55 +19,35 @@ export async function POST(req: NextRequest) {
       pace,
     } = body;
 
-    // --------------------------------------------------
-    // VALIDATION
-    // --------------------------------------------------
-
     if (!origin || !destination) {
       return NextResponse.json(
-        {
-          error: "Origin and destination are required.",
-        },
+        { error: "Origin and destination are required." },
         { status: 400 }
       );
     }
 
     if (!startDate || !endDate) {
       return NextResponse.json(
-        {
-          error: "Start date and end date are required.",
-        },
+        { error: "Start date and end date are required." },
         { status: 400 }
       );
     }
 
     if (!groupSize || !totalBudgetINR) {
       return NextResponse.json(
-        {
-          error: "Group size and budget are required.",
-        },
+        { error: "Group size and budget are required." },
         { status: 400 }
       );
     }
-
-    // --------------------------------------------------
-    // GEMINI API KEY
-    // --------------------------------------------------
 
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json(
-        {
-          error: "GEMINI_API_KEY is missing.",
-        },
+        { error: "GEMINI_API_KEY is missing." },
         { status: 500 }
       );
     }
-
-    // --------------------------------------------------
-    // CALCULATE NUMBER OF DAYS
-    // --------------------------------------------------
 
     const start = new Date(startDate);
     const end = new Date(endDate);
@@ -81,9 +57,7 @@ export async function POST(req: NextRequest) {
       Number.isNaN(end.getTime())
     ) {
       return NextResponse.json(
-        {
-          error: "Invalid start or end date.",
-        },
+        { error: "Invalid start or end date." },
         { status: 400 }
       );
     }
@@ -96,25 +70,16 @@ export async function POST(req: NextRequest) {
 
     if (numberOfDays <= 0) {
       return NextResponse.json(
-        {
-          error: "End date must be after start date.",
-        },
+        { error: "End date must be after start date." },
         { status: 400 }
       );
     }
-
-    // --------------------------------------------------
-    // LLM PROMPT
-    // --------------------------------------------------
 
     const prompt = `
 You are MusafirAI, an expert AI travel planner.
 
 Create a complete, realistic and personalized travel itinerary
 for the user's exact trip.
-
-Use the user's supplied origin, destination, dates, travelers,
-budget, transport preference, dietary preference and travel pace.
 
 USER TRIP:
 
@@ -158,8 +123,7 @@ Do not assume a particular origin.
 
 Do not replace the user's destination.
 
-Do not use predefined attractions, hotels, restaurants,
-routes or destinations.
+Do not use predefined attractions, hotels, restaurants or routes.
 
 Determine travel information dynamically from the supplied
 origin and destination.
@@ -214,24 +178,33 @@ TRAVEL PLANNING REQUIREMENTS:
 19. Never use information from another city just because it
     is more famous.
 
-20. The itinerary MUST contain exactly ${numberOfDays} days.
+IMPORTANT DAILY STRUCTURE:
 
-21. Each day should contain multiple activities.
+For EVERY day:
 
-22. Use Indian Rupees for all costs.
+- Generate EXACTLY 4 to 6 meaningful activities.
+- Every activity must have a realistic time slot.
+- Include a balanced mix of sightseeing, experiences,
+  meals, exploration and rest where appropriate.
+- Keep activities geographically close to each other.
+- Avoid excessive travel between locations.
+- Do not repeat the same attraction unless necessary.
+- Make each day different from the previous day.
+- Do not add meaningless activities just to reach 4 activities.
+- Each activity must have a useful description.
+- Each activity must have a realistic duration.
+- Each activity must include estimated cost.
+- The final itinerary MUST contain exactly ${numberOfDays} days.
 
-23. Generate the itinerary specifically for this user's trip.
+20. Use Indian Rupees for all costs.
+
+21. Generate the itinerary specifically for this user's trip.
 
 Return ONLY the structured JSON requested by the schema.
 `;
 
-    // --------------------------------------------------
-    // STRUCTURED JSON SCHEMA
-    // --------------------------------------------------
-
     const itinerarySchema = {
       type: "object",
-
       properties: {
         id: {
           type: "string",
@@ -267,7 +240,6 @@ Return ONLY the structured JSON requested by the schema.
 
         budgetBreakdown: {
           type: "object",
-
           properties: {
             transportCostINR: {
               type: "number",
@@ -301,7 +273,6 @@ Return ONLY the structured JSON requested by the schema.
 
         stay: {
           type: "object",
-
           properties: {
             name: {
               type: "string",
@@ -345,10 +316,8 @@ Return ONLY the structured JSON requested by the schema.
 
         transitDetails: {
           type: "array",
-
           items: {
             type: "object",
-
             properties: {
               mode: {
                 type: "string",
@@ -376,7 +345,6 @@ Return ONLY the structured JSON requested by the schema.
 
               highwaysOrRoads: {
                 type: "array",
-
                 items: {
                   type: "string",
                 },
@@ -402,10 +370,8 @@ Return ONLY the structured JSON requested by the schema.
 
         days: {
           type: "array",
-
           items: {
             type: "object",
-
             properties: {
               dayNumber: {
                 type: "integer",
@@ -429,10 +395,8 @@ Return ONLY the structured JSON requested by the schema.
 
               activities: {
                 type: "array",
-
                 items: {
                   type: "object",
-
                   properties: {
                     id: {
                       type: "string",
@@ -525,8 +489,7 @@ Return ONLY the structured JSON requested by the schema.
     };
 
     // --------------------------------------------------
-    // CALL GEMINI
-    // SINGLE API KEY + LIMITED RETRY
+    // GEMINI API
     // --------------------------------------------------
 
     const MODEL = "gemini-3.1-flash-lite";
@@ -563,18 +526,10 @@ Return ONLY the structured JSON requested by the schema.
           }
         );
 
-        // --------------------------------------------------
-        // SUCCESS
-        // --------------------------------------------------
-
         if (response.ok) {
           data = await response.json();
           break;
         }
-
-        // --------------------------------------------------
-        // API ERROR
-        // --------------------------------------------------
 
         const errResponse = await response
           .json()
@@ -584,14 +539,8 @@ Return ONLY the structured JSON requested by the schema.
           errResponse?.error?.message ||
           `Gemini API error: ${response.status}`;
 
-        // --------------------------------------------------
-        // RATE LIMIT
-        // --------------------------------------------------
-
         if (response.status === 429) {
-          console.warn(
-            "Gemini rate limit reached."
-          );
+          console.warn("Gemini rate limit reached.");
 
           if (attempt === 0) {
             await new Promise((resolve) =>
@@ -612,15 +561,16 @@ Return ONLY the structured JSON requested by the schema.
           );
         }
 
-        // --------------------------------------------------
-        // OTHER API ERROR
-        // --------------------------------------------------
-
         return NextResponse.json(
           {
             error: lastApiError,
           },
-          { status: response.status >= 400 ? response.status : 500 }
+          {
+            status:
+              response.status >= 400
+                ? response.status
+                : 500,
+          }
         );
       } catch (networkErr: any) {
         lastApiError =
@@ -637,10 +587,6 @@ Return ONLY the structured JSON requested by the schema.
       }
     }
 
-    // --------------------------------------------------
-    // NO RESPONSE
-    // --------------------------------------------------
-
     if (!data) {
       return NextResponse.json(
         {
@@ -653,7 +599,7 @@ Return ONLY the structured JSON requested by the schema.
     }
 
     // --------------------------------------------------
-    // GET MODEL TEXT
+    // GET MODEL OUTPUT
     // --------------------------------------------------
 
     let rawContent = "";
@@ -662,7 +608,6 @@ Return ONLY the structured JSON requested by the schema.
       rawContent = data.output_text;
     }
 
-    // Fallback for Interactions API step output
     if (!rawContent && Array.isArray(data?.steps)) {
       const modelStep = data.steps.find(
         (step: any) =>
@@ -681,7 +626,6 @@ Return ONLY the structured JSON requested by the schema.
       }
     }
 
-    // Legacy/fallback response format
     if (
       !rawContent &&
       data?.candidates?.[0]?.content?.parts?.[0]?.text
@@ -689,10 +633,6 @@ Return ONLY the structured JSON requested by the schema.
       rawContent =
         data.candidates[0].content.parts[0].text;
     }
-
-    // --------------------------------------------------
-    // SAFETY CHECK
-    // --------------------------------------------------
 
     if (!rawContent) {
       console.error(
@@ -702,8 +642,7 @@ Return ONLY the structured JSON requested by the schema.
 
       return NextResponse.json(
         {
-          error:
-            "Gemini returned no itinerary.",
+          error: "Gemini returned no itinerary.",
         },
         { status: 500 }
       );
@@ -739,7 +678,7 @@ Return ONLY the structured JSON requested by the schema.
     }
 
     // --------------------------------------------------
-    // BASIC VALIDATION
+    // VALIDATE DAYS
     // --------------------------------------------------
 
     if (
@@ -755,8 +694,6 @@ Return ONLY the structured JSON requested by the schema.
       );
     }
 
-    // Make sure the model respected the requested
-    // number of days.
     if (itinerary.days.length !== numberOfDays) {
       return NextResponse.json(
         {
@@ -768,7 +705,27 @@ Return ONLY the structured JSON requested by the schema.
     }
 
     // --------------------------------------------------
-    // RETURN AI RESULT
+    // VALIDATE ACTIVITIES
+    // --------------------------------------------------
+
+    for (const day of itinerary.days) {
+      if (
+        !Array.isArray(day.activities) ||
+        day.activities.length < 4 ||
+        day.activities.length > 6
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "AI generated an invalid number of activities for one or more days. Please try again.",
+          },
+          { status: 500 }
+        );
+      }
+    }
+
+    // --------------------------------------------------
+    // RETURN RESULT
     // --------------------------------------------------
 
     return NextResponse.json(
