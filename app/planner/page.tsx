@@ -14,6 +14,7 @@ interface TripFormData {
   totalBudgetINR: number;
   transportMode: string;
   dietary: string;
+  pace: string;
 }
 
 const DESTINATION_CHIPS = [
@@ -39,6 +40,7 @@ export default function PlannerPage() {
     totalBudgetINR: 35000,
     transportMode: "flight",
     dietary: "vegetarian",
+    pace: "moderate",
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -152,8 +154,8 @@ export default function PlannerPage() {
         </div>
 
         {errorMessage && (
-          <div className="mb-6 p-4 rounded-2xl bg-[#FDEEED] border border-[#F8D2CF] text-[#C53929] text-xs font-bold">
-            {errorMessage}
+          <div className="mb-6 p-4 rounded-2xl bg-[#FDEEED] border border-[#F8D2CF] text-[#C53929] text-xs font-bold leading-relaxed">
+            ⚠️ {errorMessage}
           </div>
         )}
 
@@ -379,7 +381,8 @@ export default function PlannerPage() {
             <div className="pt-4">
               <button
                 type="submit"
-                className="w-full py-4 rounded-2xl bg-[#E86A45] hover:bg-[#D95D39] text-white font-bold text-sm shadow-lg shadow-[#E86A45]/25 transition transform active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+                disabled={loading}
+                className="w-full py-4 rounded-2xl bg-[#E86A45] hover:bg-[#D95D39] text-white font-bold text-sm shadow-lg shadow-[#E86A45]/25 transition transform active:scale-98 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span>✨</span> Generate Detailed Itinerary
               </button>

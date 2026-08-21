@@ -54,9 +54,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    // Collect all configured Gemini API keys
+    const apiKeys = [
+      process.env.GEMINI_API_KEY,
+      process.env.GEMINI_API_KEY_1,
+      process.env.GEMINI_API_KEY_2,
+      process.env.GEMINI_API_KEY_3,
+    ].filter(Boolean) as string[];
 
-    if (!apiKey) {
+    if (apiKeys.length === 0) {
       return NextResponse.json(
         {
           error: "GEMINI_API_KEY is missing.",
@@ -520,53 +526,68 @@ TRAVEL PLANNING REQUIREMENTS:
 
 
     // --------------------------------------------------
-    // CALL GEMINI
+    // CALL GEMINI WITH KEY ROTATION & RETRY
     // --------------------------------------------------
 
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/interactions",
-      {
-        method: "POST",
+    const shuffledKeys = [...apiKeys].sort(() => Math.random() - 0.5);
+    let data: any = null;
+    let lastApiError: string = "";
 
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
+    for (const key of shuffledKeys) {
+      try {
+        const response = await fetch(
+          "https://generativelanguage.googleapis.com/v1beta/interactions",
+          {
+            method: "POST",
 
-        body: JSON.stringify({
-          model: "gemini-3.6-flash",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": key,
+            },
 
-          input: prompt,
+            body: JSON.stringify({
+              model: "gemini-3.6-flash",
 
-          response_format: {
-            type: "text",
-            mime_type: "application/json",
-            schema: itinerarySchema,
-          },
-        }),
+              input: prompt,
+
+              response_format: {
+                type: "text",
+                mime_type: "application/json",
+                schema: itinerarySchema,
+              },
+            }),
+          }
+        );
+
+        if (response.ok) {
+          data = await response.json();
+          break;
+        }
+
+        const errResponse = await response.json().catch(() => ({}));
+        lastApiError =
+          errResponse?.error?.message ||
+          `Gemini API error: ${response.status}`;
+
+        if (response.status === 429) {
+          console.warn("Quota limit hit on current key, switching to next key...");
+          continue;
+        } else {
+          break;
+        }
+      } catch (networkErr: any) {
+        lastApiError = networkErr?.message || "Network error while calling Gemini.";
       }
-    );
+    }
 
-
-    // --------------------------------------------------
-    // READ RESPONSE
-    // --------------------------------------------------
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error(
-        "Gemini API Error:",
-        JSON.stringify(data, null, 2)
-      );
-
+    if (!data) {
       return NextResponse.json(
         {
           error:
-            data?.error?.message ||
-            `Gemini API error: ${response.status}`,
+            lastApiError ||
+            "Rate limit reached on all configured API keys. Please wait 30 seconds.",
         },
-        { status: response.status }
+        { status: 429 }
       );
     }
 
@@ -599,6 +620,10 @@ TRAVEL PLANNING REQUIREMENTS:
       }
     }
 
+    if (!rawContent && data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      rawContent = data.candidates[0].content.parts[0].text;
+    }
+
 
     // --------------------------------------------------
     // SAFETY CHECK
@@ -627,7 +652,13 @@ TRAVEL PLANNING REQUIREMENTS:
     let itinerary;
 
     try {
-      itinerary = JSON.parse(rawContent);
+      const cleanJson = rawContent
+        .replace(/^```json\s*/i, "")
+        .replace(/^```\s*/i, "")
+        .replace(/```$/i, "")
+        .trim();
+
+      itinerary = JSON.parse(cleanJson);
     } catch (error) {
       console.error(
         "Invalid Gemini JSON:",
