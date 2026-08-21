@@ -526,59 +526,62 @@ TRAVEL PLANNING REQUIREMENTS:
 // --------------------------------------------------
     // CALL GEMINI WITH KEY ROTATION & RETRY
     // --------------------------------------------------
+// --------------------------------------------------
+// CALL GEMINI WITH KEY ROTATION & RETRY
+// --------------------------------------------------
 
-    const MODEL = "gemini-3.6-flash";
-    const shuffledKeys = [...apiKeys].sort(() => Math.random() - 0.5);
-    let data: any = null;
-    let lastApiError: string = "";
+const MODEL = "gemini-3.6-flash";
+const shuffledKeys = [...apiKeys].sort(() => Math.random() - 0.5);
+let data: any = null;
+let lastApiError: string = "";
 
-    for (const key of shuffledKeys) {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          const response = await fetch(
-            "https://generativelanguage.googleapis.com/v1beta/interactions",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-goog-api-key": key,
-              },
-              body: JSON.stringify({
-                model: MODEL,
-                input: prompt,
-                response_format: {
-                  type: "text",
-                  mime_type: "application/json",
-                  schema: itinerarySchema,
-                },
-              }),
-            }
-          );
-
-          if (response.ok) {
-            data = await response.json();
-            break;
-          }
-
-          const errResponse = await response.json().catch(() => ({}));
-          lastApiError =
-            errResponse?.error?.message ||
-            `Gemini API error: ${response.status}`;
-
-          if (response.status === 429) {
-            console.warn("429 rate limit hit, pausing and trying next key...");
-            await new Promise((resolve) => setTimeout(resolve, 1500));
-            continue;
-          } else {
-            break;
-          }
-        } catch (networkErr: any) {
-          lastApiError = networkErr?.message || "Network error while calling Gemini.";
+for (const key of shuffledKeys) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/interactions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": key,
+          },
+          body: JSON.stringify({
+            model: MODEL,
+            input: prompt,
+            response_format: {
+              type: "text",
+              mime_type: "application/json",
+              schema: itinerarySchema,
+            },
+          }),
         }
+      );
+
+      if (response.ok) {
+        data = await response.json();
+        break;
       }
 
-      if (data) break;
+      const errResponse = await response.json().catch(() => ({}));
+      lastApiError =
+        errResponse?.error?.message ||
+        `Gemini API error: ${response.status}`;
+
+      if (response.status === 429) {
+        console.warn("429 rate limit hit, pausing for next attempt/key...");
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+        continue;
+      } else {
+        break;
+      }
+    } catch (networkErr: any) {
+      lastApiError = networkErr?.message || "Network error while calling Gemini.";
     }
+  }
+
+  if (data) break;
+}
 
     if (!data) {
       return NextResponse.json(
