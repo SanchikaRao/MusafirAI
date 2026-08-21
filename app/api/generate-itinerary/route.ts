@@ -532,13 +532,12 @@ TRAVEL PLANNING REQUIREMENTS:
     const shuffledKeys = [...apiKeys].sort(() => Math.random() - 0.5);
     let data: any = null;
     let lastApiError: string = "";
-const MODELS = [
-      "gemini-3.6-flash",
-      "gemini-3.6-pro"
-    ];
+const MODEL = "gemini-3.6-flash";
+    let data: any = null;
+    let lastApiError: string = "";
 
-    for (const model of MODELS) {
-      for (const key of shuffledKeys) {
+    for (const key of shuffledKeys) {
+      for (let attempt = 0; attempt < 2; attempt++) {
         try {
           const response = await fetch(
             "https://generativelanguage.googleapis.com/v1beta/interactions",
@@ -549,7 +548,7 @@ const MODELS = [
                 "x-goog-api-key": key,
               },
               body: JSON.stringify({
-                model: model,
+                model: MODEL,
                 input: prompt,
                 response_format: {
                   type: "text",
@@ -570,9 +569,9 @@ const MODELS = [
             errResponse?.error?.message ||
             `Gemini API error: ${response.status}`;
 
-          // If rate limited or model retired/unavailable, continue to next attempt
-          if (response.status === 429 || response.status === 404 || response.status === 400) {
-            console.warn(`Model ${model} returned ${response.status}, trying fallback...`);
+          if (response.status === 429) {
+            console.warn("429 rate limit hit, pausing and trying next key...");
+            await new Promise((resolve) => setTimeout(resolve, 1500));
             continue;
           } else {
             break;
@@ -581,9 +580,20 @@ const MODELS = [
           lastApiError = networkErr?.message || "Network error while calling Gemini.";
         }
       }
+
       if (data) break;
     }
 
+    if (!data) {
+      return NextResponse.json(
+        {
+          error:
+            lastApiError ||
+            "All API keys reached rate limit. Please wait 30 seconds before retrying.",
+        },
+        { status: 429 }
+      );
+    }
     if (!data) {
       return NextResponse.json(
         {
