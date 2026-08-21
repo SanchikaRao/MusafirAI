@@ -532,53 +532,57 @@ TRAVEL PLANNING REQUIREMENTS:
     const shuffledKeys = [...apiKeys].sort(() => Math.random() - 0.5);
     let data: any = null;
     let lastApiError: string = "";
-const MODELS = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash"];
+const MODELS = [
+      "gemini-3.6-flash",
+      "gemini-3.6-pro"
+    ];
 
-    for (const model of MODELS) {
-      for (const key of shuffledKeys) {
-        try {
-          const response = await fetch(
-            "https://generativelanguage.googleapis.com/v1beta/interactions",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-goog-api-key": key,
-              },
-              body: JSON.stringify({
-                model: model,
-                input: prompt,
-                response_format: {
-                  type: "text",
-                  mime_type: "application/json",
-                  schema: itinerarySchema,
-                },
-              }),
-            }
-          );
+    for (const model of MODELS) {
+      for (const key of shuffledKeys) {
+        try {
+          const response = await fetch(
+            "https://generativelanguage.googleapis.com/v1beta/interactions",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-goog-api-key": key,
+              },
+              body: JSON.stringify({
+                model: model,
+                input: prompt,
+                response_format: {
+                  type: "text",
+                  mime_type: "application/json",
+                  schema: itinerarySchema,
+                },
+              }),
+            }
+          );
 
-          if (response.ok) {
-            data = await response.json();
-            break;
-          }
+          if (response.ok) {
+            data = await response.json();
+            break;
+          }
 
-          const errResponse = await response.json().catch(() => ({}));
-          lastApiError =
-            errResponse?.error?.message ||
-            `Gemini API error: ${response.status}`;
+          const errResponse = await response.json().catch(() => ({}));
+          lastApiError =
+            errResponse?.error?.message ||
+            `Gemini API error: ${response.status}`;
 
-          if (response.status === 429) {
-            console.warn(`Quota reached on ${model} with current key, trying next...`);
-            continue;
-          } else {
-            break;
-          }
-        } catch (networkErr: any) {
-          lastApiError = networkErr?.message || "Network error while calling Gemini.";
-        }
-      }
-      if (data) break; // Stop loop once a successful response is received
-    }
+          // If rate limited or model retired/unavailable, continue to next attempt
+          if (response.status === 429 || response.status === 404 || response.status === 400) {
+            console.warn(`Model ${model} returned ${response.status}, trying fallback...`);
+            continue;
+          } else {
+            break;
+          }
+        } catch (networkErr: any) {
+          lastApiError = networkErr?.message || "Network error while calling Gemini.";
+        }
+      }
+      if (data) break;
+    }
 
     if (!data) {
       return NextResponse.json(
