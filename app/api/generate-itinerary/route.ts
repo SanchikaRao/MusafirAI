@@ -523,16 +523,12 @@ TRAVEL PLANNING REQUIREMENTS:
         "days",
       ],
     };
-
-
-    // --------------------------------------------------
+// --------------------------------------------------
     // CALL GEMINI WITH KEY ROTATION & RETRY
     // --------------------------------------------------
 
+    const MODEL = "gemini-3.6-flash";
     const shuffledKeys = [...apiKeys].sort(() => Math.random() - 0.5);
-    let data: any = null;
-    let lastApiError: string = "";
-const MODEL = "gemini-3.6-flash";
     let data: any = null;
     let lastApiError: string = "";
 
@@ -594,18 +590,6 @@ const MODEL = "gemini-3.6-flash";
         { status: 429 }
       );
     }
-    if (!data) {
-      return NextResponse.json(
-        {
-          error:
-            lastApiError ||
-            "Rate limit reached on all configured API keys. Please wait 30 seconds.",
-        },
-        { status: 429 }
-      );
-    }
-
-
     // --------------------------------------------------
     // GET MODEL TEXT
     // --------------------------------------------------
