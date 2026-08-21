@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     // --------------------------------------------------
-    // USER INPUT — NOTHING IS HARD-CODED
+    // USER INPUT
     // --------------------------------------------------
 
     const {
@@ -54,15 +54,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Collect all configured Gemini API keys
-    const apiKeys = [
-      process.env.GEMINI_API_KEY,
-      process.env.GEMINI_API_KEY_1,
-      process.env.GEMINI_API_KEY_2,
-      process.env.GEMINI_API_KEY_3,
-    ].filter(Boolean) as string[];
+    // --------------------------------------------------
+    // GEMINI API KEY
+    // --------------------------------------------------
 
-    if (apiKeys.length === 0) {
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
       return NextResponse.json(
         {
           error: "GEMINI_API_KEY is missing.",
@@ -73,11 +71,22 @@ export async function POST(req: NextRequest) {
 
     // --------------------------------------------------
     // CALCULATE NUMBER OF DAYS
-    // This is calculation, NOT travel hard-coding.
     // --------------------------------------------------
 
     const start = new Date(startDate);
     const end = new Date(endDate);
+
+    if (
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime())
+    ) {
+      return NextResponse.json(
+        {
+          error: "Invalid start or end date.",
+        },
+        { status: 400 }
+      );
+    }
 
     const numberOfDays =
       Math.floor(
@@ -102,8 +111,10 @@ export async function POST(req: NextRequest) {
 You are MusafirAI, an expert AI travel planner.
 
 Create a complete, realistic and personalized travel itinerary
-using ONLY the information supplied by the user and your own
-knowledge/reasoning.
+for the user's exact trip.
+
+Use the user's supplied origin, destination, dates, travelers,
+budget, transport preference, dietary preference and travel pace.
 
 USER TRIP:
 
@@ -137,96 +148,85 @@ ${dietary || "No specific preference"}
 Travel Pace:
 ${pace || "moderate"}
 
-
 IMPORTANT:
-
-You are NOT restricted to any predefined destination.
 
 The destination can be ANY city, town, region or country.
 
-Do not assume the destination is a particular Indian city.
+Do not assume a particular Indian city.
 
-Do not assume the origin is a particular city.
+Do not assume a particular origin.
 
-Do not use predefined attractions.
+Do not replace the user's destination.
 
-Do not use predefined hotels.
+Do not use predefined attractions, hotels, restaurants,
+routes or destinations.
 
-Do not use predefined restaurants.
-
-Do not use predefined routes.
-
-Determine all travel information dynamically from the supplied
+Determine travel information dynamically from the supplied
 origin and destination.
-
 
 TRAVEL PLANNING REQUIREMENTS:
 
 1. Understand the geography between origin and destination.
 
-2. Determine the most appropriate transportation option based on:
+2. Determine an appropriate transportation option based on:
    - user preference
    - distance
    - practicality
    - approximate cost
    - travel time
 
-3. If the user selected road travel, determine realistic roads,
-   highways or routes appropriate for the actual origin and
-   destination.
+3. If road travel is selected, provide realistic roads,
+   highways or routes appropriate for the actual trip.
 
 4. Recommend accommodation appropriate for the actual destination.
 
-5. Recommend real attractions and experiences appropriate for the
-   destination.
+5. Recommend real attractions and experiences appropriate
+   for the destination.
 
 6. Do not invent obviously fictional tourist attractions.
 
-7. Keep each day's activities geographically sensible so that the
-   traveler does not unnecessarily travel back and forth.
+7. Keep each day's activities geographically sensible.
 
-8. Consider opening hours and realistic travel time where possible.
+8. Avoid unnecessary backtracking.
 
-9. Consider the user's dietary preference.
+9. Consider realistic opening hours where possible.
 
-10. Consider the user's travel pace.
+10. Consider the user's dietary preference.
 
-11. Respect the user's total budget.
+11. Consider the user's travel pace.
 
-12. Estimate transportation, accommodation, food and activity costs.
+12. Respect the user's total budget.
 
-13. Provide realistic latitude and longitude for locations.
+13. Estimate transportation, accommodation, food and activity costs.
 
-14. Make each day meaningfully different.
+14. Provide realistic latitude and longitude for locations.
 
-15. If the destination has multiple neighborhoods/areas, organize
-    activities geographically.
+15. Make each day meaningfully different.
 
-16. If the requested budget is unrealistic, clearly explain this
-    through the budget notes while still creating the best possible
-    itinerary.
+16. If the destination contains multiple neighborhoods or areas,
+    organize activities geographically.
 
-17. Never replace the user's destination with another destination.
+17. If the budget is unrealistic, explain this in budgetNotes
+    while still creating the best possible itinerary.
 
-18. Never use information from a different city just because it is
-    more famous.
+18. Never replace the user's destination with another destination.
 
-19. The itinerary must contain EXACTLY ${numberOfDays} days.
+19. Never use information from another city just because it
+    is more famous.
 
-20. Each day should contain multiple activities.
+20. The itinerary MUST contain exactly ${numberOfDays} days.
 
-21. Use Indian Rupees for all costs unless the user explicitly
-    requests another currency.
+21. Each day should contain multiple activities.
 
-22. Generate the itinerary specifically for this user's trip.
+22. Use Indian Rupees for all costs.
+
+23. Generate the itinerary specifically for this user's trip.
+
+Return ONLY the structured JSON requested by the schema.
 `;
-
 
     // --------------------------------------------------
     // STRUCTURED JSON SCHEMA
-    //
-    // This defines ONLY the format.
-    // Gemini generates ALL actual travel content.
     // --------------------------------------------------
 
     const itinerarySchema = {
@@ -523,76 +523,135 @@ TRAVEL PLANNING REQUIREMENTS:
         "days",
       ],
     };
-// --------------------------------------------------
-    // CALL GEMINI WITH KEY ROTATION & RETRY
+
     // --------------------------------------------------
-// --------------------------------------------------
-// CALL GEMINI WITH KEY ROTATION & RETRY
-// --------------------------------------------------
+    // CALL GEMINI
+    // SINGLE API KEY + LIMITED RETRY
+    // --------------------------------------------------
 
-const MODEL = "gemini-3.6-flash";
-const shuffledKeys = [...apiKeys].sort(() => Math.random() - 0.5);
-let data: any = null;
-let lastApiError: string = "";
+    const MODEL = "gemini-3.1-flash-lite";
 
-for (const key of shuffledKeys) {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const response = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/interactions",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": key,
-          },
-          body: JSON.stringify({
-            model: MODEL,
-            input: prompt,
-            response_format: {
-              type: "text",
-              mime_type: "application/json",
-              schema: itinerarySchema,
+    let data: any = null;
+    let lastApiError = "";
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await fetch(
+          "https://generativelanguage.googleapis.com/v1beta/interactions",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": apiKey,
             },
-          }),
+
+            body: JSON.stringify({
+              model: MODEL,
+              input: prompt,
+
+              response_format: {
+                type: "text",
+                mime_type: "application/json",
+                schema: itinerarySchema,
+              },
+
+              generation_config: {
+                max_output_tokens: 12000,
+              },
+            }),
+          }
+        );
+
+        // --------------------------------------------------
+        // SUCCESS
+        // --------------------------------------------------
+
+        if (response.ok) {
+          data = await response.json();
+          break;
         }
-      );
 
-      if (response.ok) {
-        data = await response.json();
-        break;
+        // --------------------------------------------------
+        // API ERROR
+        // --------------------------------------------------
+
+        const errResponse = await response
+          .json()
+          .catch(() => ({}));
+
+        lastApiError =
+          errResponse?.error?.message ||
+          `Gemini API error: ${response.status}`;
+
+        // --------------------------------------------------
+        // RATE LIMIT
+        // --------------------------------------------------
+
+        if (response.status === 429) {
+          console.warn(
+            "Gemini rate limit reached."
+          );
+
+          if (attempt === 0) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, 4000)
+            );
+
+            continue;
+          }
+
+          return NextResponse.json(
+            {
+              code: "AI_QUOTA_EXCEEDED",
+              error:
+                "MusafirAI is temporarily out of AI capacity. Please try again later.",
+              details: lastApiError,
+            },
+            { status: 429 }
+          );
+        }
+
+        // --------------------------------------------------
+        // OTHER API ERROR
+        // --------------------------------------------------
+
+        return NextResponse.json(
+          {
+            error: lastApiError,
+          },
+          { status: response.status >= 400 ? response.status : 500 }
+        );
+      } catch (networkErr: any) {
+        lastApiError =
+          networkErr?.message ||
+          "Network error while calling Gemini.";
+
+        if (attempt === 0) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, 1500)
+          );
+
+          continue;
+        }
       }
-
-      const errResponse = await response.json().catch(() => ({}));
-      lastApiError =
-        errResponse?.error?.message ||
-        `Gemini API error: ${response.status}`;
-
-      if (response.status === 429) {
-        console.warn("429 rate limit hit, pausing for next attempt/key...");
-        await new Promise((resolve) => setTimeout(resolve, 4000));
-        continue;
-      } else {
-        break;
-      }
-    } catch (networkErr: any) {
-      lastApiError = networkErr?.message || "Network error while calling Gemini.";
     }
-  }
 
-  if (data) break;
-}
+    // --------------------------------------------------
+    // NO RESPONSE
+    // --------------------------------------------------
 
     if (!data) {
       return NextResponse.json(
         {
           error:
             lastApiError ||
-            "All API keys reached rate limit. Please wait 30 seconds before retrying.",
+            "Gemini did not return an itinerary.",
         },
-        { status: 429 }
+        { status: 500 }
       );
     }
+
     // --------------------------------------------------
     // GET MODEL TEXT
     // --------------------------------------------------
@@ -603,13 +662,14 @@ for (const key of shuffledKeys) {
       rawContent = data.output_text;
     }
 
+    // Fallback for Interactions API step output
     if (!rawContent && Array.isArray(data?.steps)) {
       const modelStep = data.steps.find(
         (step: any) =>
           step?.type === "model_output"
       );
 
-      if (modelStep?.content) {
+      if (Array.isArray(modelStep?.content)) {
         const textPart = modelStep.content.find(
           (part: any) =>
             part?.type === "text"
@@ -621,10 +681,14 @@ for (const key of shuffledKeys) {
       }
     }
 
-    if (!rawContent && data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-      rawContent = data.candidates[0].content.parts[0].text;
+    // Legacy/fallback response format
+    if (
+      !rawContent &&
+      data?.candidates?.[0]?.content?.parts?.[0]?.text
+    ) {
+      rawContent =
+        data.candidates[0].content.parts[0].text;
     }
-
 
     // --------------------------------------------------
     // SAFETY CHECK
@@ -645,12 +709,11 @@ for (const key of shuffledKeys) {
       );
     }
 
-
     // --------------------------------------------------
     // PARSE JSON
     // --------------------------------------------------
 
-    let itinerary;
+    let itinerary: any;
 
     try {
       const cleanJson = rawContent
@@ -675,13 +738,12 @@ for (const key of shuffledKeys) {
       );
     }
 
-
     // --------------------------------------------------
     // BASIC VALIDATION
     // --------------------------------------------------
 
     if (
-      !itinerary.days ||
+      !itinerary ||
       !Array.isArray(itinerary.days)
     ) {
       return NextResponse.json(
@@ -693,16 +755,26 @@ for (const key of shuffledKeys) {
       );
     }
 
+    // Make sure the model respected the requested
+    // number of days.
+    if (itinerary.days.length !== numberOfDays) {
+      return NextResponse.json(
+        {
+          error:
+            `AI generated ${itinerary.days.length} days instead of ${numberOfDays}. Please try again.`,
+        },
+        { status: 500 }
+      );
+    }
 
     // --------------------------------------------------
-    // RETURN AI RESULT AS-IS
+    // RETURN AI RESULT
     // --------------------------------------------------
 
     return NextResponse.json(
       itinerary,
       { status: 200 }
     );
-
   } catch (error: any) {
     console.error(
       "MusafirAI Error:",
