@@ -49,7 +49,7 @@ export default function PlannerPage() {
     }));
   };
 
-  const handleSelectChip = (chip: typeof DESTINATION_CHIPS[0]) => {
+  const handleSelectChip = (chip: (typeof DESTINATION_CHIPS)[0]) => {
     setFormData((prev) => ({
       ...prev,
       destination: chip.name,
@@ -75,17 +75,16 @@ export default function PlannerPage() {
         body: JSON.stringify(formData),
       });
 
-      const data = await response.json().catch(() => ({}));
+      const itineraryData = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || `Server returned status ${response.status}`);
+        throw new Error(itineraryData.error || `Server error (${response.status})`);
       }
 
-      const itineraryData = data;
-      // Store both keys so any itinerary reader page can find it instantly
-      localStorage.setItem("current_itinerary", JSON.stringify(itineraryData));
+      const serialized = JSON.stringify(itineraryData);
+      localStorage.setItem("current_itinerary", serialized);
       if (itineraryData.id) {
-        localStorage.setItem(`itinerary_${itineraryData.id}`, JSON.stringify(itineraryData));
+        localStorage.setItem(`itinerary_${itineraryData.id}`, serialized);
       }
 
       try {
@@ -110,7 +109,7 @@ export default function PlannerPage() {
           });
         }
       } catch (authErr) {
-        console.warn("Could not save to Supabase:", authErr);
+        console.warn("Supabase sync notice:", authErr);
       }
 
       router.push(`/itinerary/${itineraryData.id}`);
@@ -123,23 +122,17 @@ export default function PlannerPage() {
   return (
     <div className="min-h-screen bg-[#FAF7F2] text-[#2D2A26] py-10 px-4 sm:px-6 flex flex-col justify-between">
       <div className="max-w-3xl mx-auto w-full flex items-center justify-between mb-6">
-        <Link href="/" className="flex items-center gap-2">
+        <Link className="flex items-center gap-2" href="/">
           <div className="w-9 h-9 rounded-2xl bg-[#E86A45] text-white flex items-center justify-center font-serif text-base font-bold shadow-md shadow-[#E86A45]/20">
             ✦
           </div>
           <span className="font-serif font-bold text-xl text-[#1E1B18]">MusafirAI</span>
         </Link>
         <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard"
-            className="text-xs font-semibold text-[#7A7166] hover:text-[#1E1B18] transition"
-          >
+          <Link className="text-xs font-semibold text-[#7A7166] hover:text-[#1E1B18] transition" href="/dashboard">
             My Trips
           </Link>
-          <Link
-            href="/auth"
-            className="text-xs font-bold text-[#E86A45] bg-white px-3.5 py-1.5 rounded-full border border-[#EDE7DC] shadow-2xs hover:bg-[#FAF7F2] transition"
-          >
+          <Link className="text-xs font-bold text-[#E86A45] bg-white px-3.5 py-1.5 rounded-full border border-[#EDE7DC] shadow-2xs hover:bg-[#FAF7F2] transition" href="/auth">
             Account / Login
           </Link>
         </div>
