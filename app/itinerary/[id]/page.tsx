@@ -1,5 +1,5 @@
 "use client";
-
+import html2pdf from "html2pdf.js";
 import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -250,11 +250,81 @@ export default function ExactItineraryPage() {
     }
   };
 
-  const handleDownloadPDF = () => {
-    if (typeof window !== "undefined") {
-      window.print();
-    }
-  };
+  const handleDownloadPDF = async () => {
+  const element = document.getElementById("pdf-content");
+
+  if (!element) {
+    alert("PDF content not found.");
+    return;
+  }
+
+  try {
+    const html2pdfModule = await import("html2pdf.js");
+    const html2pdf = html2pdfModule.default;
+
+    const wrapper = document.createElement("div");
+    wrapper.style.position = "fixed";
+    wrapper.style.left = "0";
+    wrapper.style.top = "0";
+    wrapper.style.width = "794px";
+    wrapper.style.boxSizing = "border-box";
+    wrapper.style.overflow = "hidden";
+    wrapper.style.background = "#FAF7F0";
+    wrapper.style.zIndex = "-1";
+    wrapper.style.pointerEvents = "none";
+
+    const clone = element.cloneNode(true) as HTMLElement;
+clone.classList.remove("hidden");
+clone.style.display = "block";
+clone.style.width = "100%";
+clone.style.maxWidth = "100%";
+clone.style.boxSizing = "border-box";
+clone.style.background = "#FAF7F0";
+clone.style.color = "#2D2926";
+clone.style.border = "none";
+clone.style.outline = "none";
+clone.style.boxShadow = "none";
+
+clone.querySelectorAll("*").forEach((node) => {
+  const item = node as HTMLElement;
+
+  item.style.outline = "none";
+  item.style.boxShadow = "none";
+  item.style.border = "none";
+  item.style.borderWidth = "0";
+});
+
+    wrapper.appendChild(clone);
+    document.body.appendChild(wrapper);
+
+    await html2pdf()
+      .set({
+        margin: 2.5,
+        filename: "MusafirAI-Itinerary.pdf",
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: {
+  scale: 2,
+  useCORS: true,
+  backgroundColor: "#FAF7F0",
+  logging: true,
+  windowWidth: 794,
+},
+        jsPDF: {
+          unit: "mm",
+          format: "a4",
+          orientation: "portrait",
+        },
+        pagebreak: { mode: ["css", "legacy"] },
+      })
+      .from(clone)
+      .save();
+
+    wrapper.remove();
+  } catch (error) {
+    console.error("PDF download failed:", error);
+    alert("PDF download failed. Please try again.");
+  }
+};
 
   const toggleDone = (actId: string) => {
     setCompletedActivities((prev) => ({ ...prev, [actId]: !prev[actId] }));
@@ -614,7 +684,10 @@ export default function ExactItineraryPage() {
         {/* ------------------------------------------------------------- */}
         {/* PRINT-ONLY VIEW: RENDERS ALL DAYS SEQUENTIALLY FOR THE PDF   */}
         {/* ------------------------------------------------------------- */}
-        <div className="hidden print:block space-y-8 pt-4">
+        <div
+  id="pdf-content"
+  className="space-y-8 pt-4"
+>
           {/* Stay & Budget Summary in PDF */}
           <div className="grid grid-cols-2 gap-4 pb-6 border-b border-[#EDE7DC]">
             {itinerary.stay && (
