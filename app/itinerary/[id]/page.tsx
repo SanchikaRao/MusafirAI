@@ -314,7 +314,6 @@ clone.querySelectorAll("*").forEach((node) => {
           format: "a4",
           orientation: "portrait",
         },
-        pagebreak: { mode: ["css", "legacy"] },
       })
       .from(clone)
       .save();
