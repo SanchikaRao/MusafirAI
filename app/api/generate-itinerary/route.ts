@@ -708,12 +708,33 @@ Return ONLY the structured JSON requested by the schema.
     // VALIDATE ACTIVITIES
     // --------------------------------------------------
 
+    
+    // VALIDATE ACTIVITIES
     for (const day of itinerary.days) {
+      if (!Array.isArray(day.activities)) {
+        console.error("Invalid activities for day:", day.dayNumber);
+        return NextResponse.json(
+          {
+            error: `AI returned invalid activities for day ${day.dayNumber}.`,
+          },
+          { status: 500 }
+        );
+      }
+
+      console.log(
+        `Day ${day.dayNumber}: ${day.activities.length} activities`
+      );
+
       if (
-        !Array.isArray(day.activities) ||
         day.activities.length < 4 ||
         day.activities.length > 6
       ) {
+        console.error("Invalid activity count:", {
+          dayNumber: day.dayNumber,
+          count: day.activities.length,
+          activities: day.activities.map((a: any) => a.title),
+        });
+
         return NextResponse.json(
           {
             error:
@@ -723,6 +744,7 @@ Return ONLY the structured JSON requested by the schema.
         );
       }
     }
+
 
     // --------------------------------------------------
     // RETURN RESULT
