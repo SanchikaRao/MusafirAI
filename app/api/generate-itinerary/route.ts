@@ -711,7 +711,7 @@ Return ONLY the structured JSON requested by the schema.
     
     // VALIDATE ACTIVITIES
     for (const day of itinerary.days) {
-      if (!Array.isArray(day.activities)) {
+      if (!Array.isArray(day.activities) || day.activities,length === 0) {
         console.error("Invalid activities for day:", day.dayNumber);
         return NextResponse.json(
           {
@@ -725,10 +725,7 @@ Return ONLY the structured JSON requested by the schema.
         `Day ${day.dayNumber}: ${day.activities.length} activities`
       );
 
-      if (
-        day.activities.length < 4 ||
-        day.activities.length > 6
-      ) {
+      if (day.activities.length > 8) {
         console.error("Invalid activity count:", {
           dayNumber: day.dayNumber,
           count: day.activities.length,
