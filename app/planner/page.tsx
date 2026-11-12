@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import Link from "next/link";
+import type { User } from "@supabase/supabase-js";
 
 interface TripFormData {
   origin: string;
@@ -28,6 +29,8 @@ const DESTINATION_CHIPS = [
 
 export default function PlannerPage() {
   const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
 
@@ -42,6 +45,33 @@ export default function PlannerPage() {
     dietary: "vegetarian",
     pace: "moderate",
   });
+
+  useEffect(() => {
+    const loadSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    };
+
+    loadSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    router.refresh();
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -91,12 +121,12 @@ export default function PlannerPage() {
 
       try {
         const {
-          data: { user },
+          data: { user: currentUser },
         } = await supabase.auth.getUser();
 
-        if (user) {
+        if (currentUser) {
           await supabase.from("trips").insert({
-            user_id: user.id,
+            user_id: currentUser.id,
             trip_title: itineraryData.tripTitle || `${formData.destination} Getaway`,
             origin: formData.origin,
             destination: formData.destination,
@@ -124,19 +154,49 @@ export default function PlannerPage() {
   return (
     <div className="min-h-screen bg-[#FAF7F2] text-[#2D2A26] py-10 px-4 sm:px-6 flex flex-col justify-between">
       <div className="max-w-3xl mx-auto w-full flex items-center justify-between mb-6">
-        <Link className="flex items-center gap-2" href="/">
+        <Link className="flex items-center gap-2" href="/planner">
           <div className="w-9 h-9 rounded-2xl bg-[#E86A45] text-white flex items-center justify-center font-serif text-base font-bold shadow-md shadow-[#E86A45]/20">
             ✦
           </div>
           <span className="font-serif font-bold text-xl text-[#1E1B18]">MusafirAI</span>
         </Link>
+
         <div className="flex items-center gap-3">
-          <Link className="text-xs font-semibold text-[#7A7166] hover:text-[#1E1B18] transition" href="/dashboard">
-            My Trips
-          </Link>
-          <Link className="text-xs font-bold text-[#E86A45] bg-white px-3.5 py-1.5 rounded-full border border-[#EDE7DC] shadow-2xs hover:bg-[#FAF7F2] transition" href="/auth">
-            Account / Login
-          </Link>
+          {!authLoading && user ? (
+            <>
+              <Link
+                className="text-xs font-semibold text-[#7A7166] hover:text-[#1E1B18] transition"
+                href="/dashboard"
+              >
+                My Trips
+              </Link>
+              <span className="text-xs font-medium text-[#7A7166] hidden sm:inline">
+                👤 {user.email}
+              </span>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="text-xs font-bold text-[#1E1B18] bg-white px-3.5 py-1.5 rounded-full border border-[#EDE7DC] shadow-2xs hover:bg-[#FAF7F2] transition cursor-pointer"
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                className="text-xs font-semibold text-[#7A7166] hover:text-[#1E1B18] transition"
+                href="/auth"
+              >
+                My Trips
+              </Link>
+              <Link
+                className="text-xs font-bold text-[#E86A45] bg-white px-3.5 py-1.5 rounded-full border border-[#EDE7DC] shadow-2xs hover:bg-[#FAF7F2] transition"
+                href="/auth"
+              >
+                Account / Login
+              </Link>
+            </>
+          )}
         </div>
       </div>
 

@@ -1,18 +1,53 @@
 "use client";
 
-import { useState } from "react";
-import { supabase } from "../../lib/supabase"; // Adjust relative path if needed
+import { useState, useEffect } from "react";
+import { supabase } from "../../lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function AuthPage() {
   const router = useRouter();
+  const [checkingSession, setCheckingSession] = useState<boolean>(true);
   const [isSignUp, setIsSignUp] = useState<boolean>(false);
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [successMessage, setSuccessMessage] = useState<string>("");
+
+  // Skip login screen if user already has an active Google/email session
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkExistingSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!isMounted) return;
+
+      if (session) {
+        router.replace("/dashboard");
+      } else {
+        setCheckingSession(false);
+      }
+    };
+
+    checkExistingSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        router.replace("/dashboard");
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [router]);
 
   // 1. Google OAuth Sign-in
   const handleGoogleLogin = async () => {
@@ -48,7 +83,7 @@ export default function AuthPage() {
         if (error) throw error;
 
         if (data.session) {
-          router.push("/dashboard");
+          router.replace("/dashboard");
         } else {
           setSuccessMessage("Check your inbox to verify your email address!");
         }
@@ -60,7 +95,7 @@ export default function AuthPage() {
         if (error) throw error;
 
         if (data.session) {
-          router.push("/dashboard");
+          router.replace("/dashboard");
         }
       }
     } catch (err: any) {
@@ -70,13 +105,21 @@ export default function AuthPage() {
     }
   };
 
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen bg-[#FAF7F2] text-[#2D2A26] flex flex-col justify-center items-center px-4 antialiased">
+        <div className="w-8 h-8 border-3 border-[#DE6B48] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#FAF7F2] text-[#2D2A26] flex flex-col justify-center items-center px-4 py-12 antialiased">
       <div className="w-full max-w-md space-y-6">
         
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <Link href="/" className="inline-flex items-center gap-2 justify-center">
+          <Link href="/planner" className="inline-flex items-center gap-2 justify-center">
             <div className="w-9 h-9 rounded-2xl bg-[#DE6B48] text-white flex items-center justify-center font-bold text-lg shadow-sm">
               ✦
             </div>
@@ -200,7 +243,7 @@ export default function AuthPage() {
               {isSignUp ? (
                 <>Already have an account? <span className="text-[#DE6B48] font-bold">Sign In</span></>
               ) : (
-                <>Don't have an account? <span className="text-[#DE6B48] font-bold">Create one</span></>
+                <>Don&apos;t have an account? <span className="text-[#DE6B48] font-bold">Create one</span></>
               )}
             </button>
           </div>
@@ -209,8 +252,8 @@ export default function AuthPage() {
 
         {/* Back Link */}
         <div className="text-center">
-          <Link href="/" className="text-xs font-semibold text-[#8C8275] hover:text-[#DE6B48] transition">
-            ← Back to Home
+          <Link href="/planner" className="text-xs font-semibold text-[#8C8275] hover:text-[#DE6B48] transition">
+            ← Back to Planner
           </Link>
         </div>
 
